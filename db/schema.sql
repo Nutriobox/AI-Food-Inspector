@@ -77,3 +77,16 @@ CREATE INDEX IF NOT EXISTS idx_orders_placed_at ON orders(placed_at);
 CREATE INDEX IF NOT EXISTS idx_orders_status    ON orders(status);
 CREATE INDEX IF NOT EXISTS idx_orders_restaurant ON orders(restaurant_id);
 CREATE INDEX IF NOT EXISTS idx_evals_created    ON evaluations(created_at);
+
+CREATE TABLE IF NOT EXISTS ai_scores (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  dish_id          INTEGER,
+  dish_name        TEXT,
+  score            INTEGER,
+  verdict          TEXT,
+  identified_as    TEXT,
+  matches_expected INTEGER,
+  summary          TEXT,
+  criteria_json    TEXT,
+  created_at       TEXT NOT NULL DEFAULT (datetime('now'))
+);

@@ -1,51 +1,37 @@
-import Database from "better-sqlite3";
-import fs from "node:fs";
-import path from "node:path";
+import { Pool, types } from "pg";
 
-const DB_DIR = path.join(process.cwd(), "data");
-const DB_PATH = path.join(DB_DIR, "nutriobox.db");
-const SCHEMA_PATH = path.join(process.cwd(), "db", "schema.sql");
+// Postgres returns BIGINT (int8) and NUMERIC as strings by default; our app
+// uses them as JS numbers (ids, counts, averages). Parse them as numbers.
+types.setTypeParser(20, (v: string) => parseInt(v, 10)); // int8 / bigint
+types.setTypeParser(1700, (v: string) => parseFloat(v)); // numeric / decimal
 
-let cached: Database.Database | null = null;
+// Postgres (Supabase) connection. Uses DATABASE_URL (Transaction pooler).
+let pool: Pool | null = null;
 
-// Columns that may be missing on databases created by an older schema.
-// Added on connect so existing data is preserved (no reseed required).
-const DISH_COLUMNS: Record<string, string> = {
-  description: "TEXT",
-  pp_item_id: "TEXT",
-  swiggy_item_id: "TEXT",
-  zomato_item_id: "TEXT",
-  bench_garnish: "TEXT",
-  bench_hygiene: "TEXT",
-  bench_portion: "TEXT",
-  bench_plating: "TEXT",
-  ai_criteria: "TEXT",
-};
-
-function migrate(conn: Database.Database) {
-  const hasDishes = conn
-    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='dishes'")
-    .get();
-  if (!hasDishes) return;
-  const existing = new Set(
-    (conn.prepare("PRAGMA table_info(dishes)").all() as { name: string }[]).map((c) => c.name)
-  );
-  for (const [col, type] of Object.entries(DISH_COLUMNS)) {
-    if (!existing.has(col)) conn.exec(`ALTER TABLE dishes ADD COLUMN ${col} ${type}`);
+function getPool(): Pool {
+  if (!pool) {
+    const connectionString = process.env.DATABASE_URL;
+    if (!connectionString) throw new Error("DATABASE_URL is not set");
+    pool = new Pool({ connectionString, max: 8 });
   }
+  return pool;
 }
 
-export function db(): Database.Database {
-  if (cached) return cached;
-  if (!fs.existsSync(DB_DIR)) fs.mkdirSync(DB_DIR, { recursive: true });
-  const isFresh = !fs.existsSync(DB_PATH);
-  const conn = new Database(DB_PATH);
-  conn.pragma("journal_mode = WAL");
-  conn.pragma("foreign_keys = ON");
-  if (isFresh && fs.existsSync(SCHEMA_PATH)) {
-    conn.exec(fs.readFileSync(SCHEMA_PATH, "utf8"));
-  }
-  migrate(conn);
-  cached = conn;
-  return conn;
+// Convert SQLite-style "?" placeholders to Postgres "$1, $2, ...".
+function toPg(sql: string): string {
+  let i = 0;
+  return sql.replace(/\?/g, () => `$${++i}`);
+}
+
+export async function q<T = any>(sql: string, params: any[] = []): Promise<T[]> {
+  const res = await getPool().query(toPg(sql), params);
+  return res.rows as T[];
+}
+
+export async function one<T = any>(sql: string, params: any[] = []): Promise<T | undefined> {
+  return (await q<T>(sql, params))[0];
+}
+
+export async function run(sql: string, params: any[] = []): Promise<void> {
+  await getPool().query(toPg(sql), params);
 }

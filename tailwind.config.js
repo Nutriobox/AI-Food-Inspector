@@ -1,23 +1,61 @@
 /** @type {import('tailwindcss').Config} */
+
+// Map a token name to an rgb() expression that still honors Tailwind's
+// opacity modifiers (e.g. bg-canvas/85). Tokens are defined in app/globals.css.
+const token = (name) => `rgb(var(${name}) / <alpha-value>)`;
+
 module.exports = {
+  darkMode: "class",
   content: ["./app/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}"],
   theme: {
     extend: {
       colors: {
-        canvas: "#FAFAF8",
-        ink: "#1A1A1A",
-        muted: "#6B7280",
-        line: "#E8E5E1",
-        chip: "#D1FAE5",
-        brand: { 50: "#ECFDF5", 100: "#D1FAE5", 500: "#10B981", 600: "#059669", 700: "#047857" },
-        danger: { 500: "#EF4444", 600: "#DC2626" },
-        warn: { 500: "#F59E0B" },
-        info: { 500: "#3B82F6" },
+        canvas: token("--canvas"),
+        surface: token("--surface"),
+        ink: token("--ink"),
+        muted: token("--muted"),
+        line: token("--line"),
+        chip: token("--chip"),
+        brand: {
+          50: token("--brand-50"),
+          100: token("--brand-100"),
+          500: token("--brand-500"),
+          600: token("--brand-600"),
+          700: token("--brand-700"),
+        },
+        danger: { 500: token("--danger-500"), 600: token("--danger-600") },
+        warn: { 500: token("--warn-500") },
+        info: { 500: token("--info-500") },
       },
-      borderRadius: { btn: "6px", card: "10px" },
+      fontFamily: {
+        // `font-sans` (Tailwind's default on most elements) now resolves to Inter.
+        sans: [
+          "var(--font-inter)",
+          "ui-sans-serif",
+          "system-ui",
+          "-apple-system",
+          "sans-serif",
+        ],
+      },
+      // Semantic display sizes layered on top of the default text-* scale.
+      // Additive — existing text-sm/text-2xl/etc. are untouched.
+      fontSize: {
+        display: ["2.25rem", { lineHeight: "2.5rem", letterSpacing: "-0.02em" }],
+        title: ["1.5rem", { lineHeight: "2rem", letterSpacing: "-0.01em" }],
+        heading: ["1.125rem", { lineHeight: "1.5rem", letterSpacing: "-0.01em" }],
+      },
+      borderRadius: {
+        btn: "var(--radius-btn)",
+        card: "var(--radius-card)",
+      },
+      // Elevation scale, all token-driven so it re-themes in dark mode.
+      // `card` and `pill` keep their original light-mode appearance.
       boxShadow: {
-        card: "0 1px 0 rgba(26,26,26,0.02), 0 0 0 1px #E8E5E1",
-        pill: "0 1px 2px rgba(0,0,0,0.06), 0 0 0 1px #E8E5E1",
+        xs: "var(--shadow-xs)",
+        card: "var(--shadow-card)",
+        pill: "var(--shadow-pill)",
+        md: "var(--shadow-md)",
+        lg: "var(--shadow-lg)",
       },
     },
   },

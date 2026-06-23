@@ -16,10 +16,10 @@ function readFilters(req: NextRequest): Filters {
 
 export async function GET(req: NextRequest) {
   const f = readFilters(req);
-  const kpis = getKpis(f);
-  const evals = getDailySeries(f, "evals");
-  const orders = getDailySeries(f, "orders");
-  const errors = getDailySeries(f, "errors");
+  const kpis = await getKpis(f);
+  const evals = await getDailySeries(f, "evals");
+  const orders = await getDailySeries(f, "orders");
+  const errors = await getDailySeries(f, "errors");
 
   function summarize(rows: { day: string; y: number }[]) {
     const ys = rows.map((r) => r.y);

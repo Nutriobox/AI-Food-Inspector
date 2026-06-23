@@ -24,7 +24,7 @@ const PatchSchema = z.object({
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   const id = parseInt(params.id, 10);
   if (Number.isNaN(id)) return NextResponse.json({ error: "Invalid id" }, { status: 400 });
-  const dish = getDishById(id);
+  const dish = await getDishById(id);
   if (!dish) return NextResponse.json({ error: "Not found" }, { status: 404 });
   return NextResponse.json({ dish });
 }
@@ -35,7 +35,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const body = await req.json();
   const parsed = PatchSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.format() }, { status: 400 });
-  const updated = updateDish(id, parsed.data);
+  const updated = await updateDish(id, parsed.data);
   if (!updated) return NextResponse.json({ error: "Not found" }, { status: 404 });
   return NextResponse.json({ dish: updated });
 }

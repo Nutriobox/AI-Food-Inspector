@@ -3,18 +3,21 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { BarChart3, ChevronDown, Monitor, Settings } from "lucide-react";
+import { BarChart3, ChevronDown, Monitor, Settings, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { syncKioskFromUrl } from "@/lib/kiosk";
 
 const NAV = [
   { label: "Analytics", href: "/overview", icon: BarChart3, section: "analytics" },
   { label: "Configuration", href: "/dish-config", icon: Settings, section: "config" },
   { label: "KDS", href: "/orders/live", icon: Monitor, section: "kds" },
+  { label: "AI Test", href: "/ai-test", icon: Sparkles, section: "aitest" },
 ] as const;
 
 function sectionFor(path: string) {
   if (path === "/dish-config") return "config";
   if (path.startsWith("/orders/live")) return "kds";
+  if (path.startsWith("/ai-test")) return "aitest";
   return "analytics";
 }
 
@@ -22,7 +25,12 @@ export function SiteHeader() {
   const pathname = usePathname();
   const active = sectionFor(pathname);
   const [open, setOpen] = useState(false);
+  const [kiosk, setKiosk] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setKiosk(syncKioskFromUrl());
+  }, [pathname]);
 
   useEffect(() => {
     function onClick(e: MouseEvent) {
@@ -31,6 +39,22 @@ export function SiteHeader() {
     document.addEventListener("click", onClick);
     return () => document.removeEventListener("click", onClick);
   }, []);
+
+  if (kiosk) {
+    return (
+      <header className="sticky top-0 z-30 bg-canvas/85 backdrop-blur border-b border-line">
+        <div className="max-w-[1440px] mx-auto px-6 h-14 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo-onwhite.png" alt="Nutriobox" className="h-6 w-auto" />
+            <span className="hidden md:inline text-muted">&middot;</span>
+            <span className="hidden md:inline text-sm text-muted">Kitchen Display</span>
+          </div>
+          <span className="text-xs text-muted">KDS mode</span>
+        </div>
+      </header>
+    );
+  }
 
   return (
     <header className="sticky top-0 z-30 bg-canvas/85 backdrop-blur border-b border-line">

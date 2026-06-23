@@ -2,11 +2,111 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  background: #FAFAF8;
-  color: #1A1A1A;
+/* ---------------------------------------------------------------------------
+   Design tokens
+
+   Colors are stored as space-separated RGB channels (not hex) so Tailwind's
+   `<alpha-value>` keeps working — i.e. `bg-canvas/85`, `bg-line/60`, etc. still
+   resolve correctly. The Tailwind config maps each token name to
+   `rgb(var(--token) / <alpha-value>)`.
+
+   To theme the entire app, override the same variable names under `.dark`.
+--------------------------------------------------------------------------- */
+:root {
+  /* surfaces & text */
+  --canvas: 250 250 248;   /* #FAFAF8 — warm paper */
+  --surface: 255 255 255;  /* #FFFFFF — cards */
+  --ink: 26 26 26;         /* #1A1A1A */
+  --muted: 107 114 128;    /* #6B7280 */
+  --line: 232 229 225;     /* #E8E5E1 — hairline borders */
+  --chip: 209 250 229;     /* #D1FAE5 */
+
+  /* brand (emerald) */
+  --brand-50: 236 253 245;  /* #ECFDF5 */
+  --brand-100: 209 250 229; /* #D1FAE5 */
+  --brand-500: 16 185 129;  /* #10B981 */
+  --brand-600: 5 150 105;   /* #059669 */
+  --brand-700: 4 120 87;    /* #047857 */
+
+  /* status */
+  --danger-500: 239 68 68;  /* #EF4444 */
+  --danger-600: 220 38 38;  /* #DC2626 */
+  --warn-500: 245 158 11;   /* #F59E0B */
+  --info-500: 59 130 246;   /* #3B82F6 */
+
+  /* keyboard focus ring */
+  --ring: 5 150 105;        /* brand-600 */
+
+  /* radii */
+  --radius-btn: 6px;
+  --radius-card: 10px;
+
+  /* elevation scale — each level keeps the 1px line ring so cards stay crisp */
+  --shadow-xs:   0 0 0 1px rgb(var(--line));
+  --shadow-card: 0 1px 0 rgb(26 26 26 / 0.02), 0 0 0 1px rgb(var(--line));
+  --shadow-pill: 0 1px 2px rgb(0 0 0 / 0.06), 0 0 0 1px rgb(var(--line));
+  --shadow-md:   0 4px 12px -2px rgb(0 0 0 / 0.08), 0 0 0 1px rgb(var(--line));
+  --shadow-lg:   0 12px 32px -8px rgb(0 0 0 / 0.12), 0 0 0 1px rgb(var(--line));
 }
 
-.num {
-  font-variant-numeric: tabular-nums;
+/* Dark-mode path. Enabled by adding `class="dark"` to <html> (Tailwind
+   darkMode: "class"). Token-driven, so every `bg-canvas`, `text-ink`,
+   `border-line`, `shadow-card`, etc. re-themes automatically. NOTE: components
+   that still hardcode default-palette tints (bg-rose-50, bg-amber-400, …) won't
+   re-theme until those are migrated to tokens in a later phase. */
+.dark {
+  --canvas: 24 24 22;      /* near-black warm */
+  --surface: 32 32 30;
+  --ink: 245 245 243;
+  --muted: 156 163 175;
+  --line: 56 56 52;
+  --chip: 6 78 59;
+
+  --brand-50: 6 46 35;     /* dark tints so brand-bg badges read on dark */
+  --brand-100: 6 78 59;
+  --brand-500: 16 185 129;
+  --brand-600: 5 150 105;
+  --brand-700: 52 211 153; /* lightened so text-brand-700 stays legible */
+
+  --danger-500: 248 113 113;
+  --danger-600: 239 68 68;
+  --warn-500: 251 191 36;
+  --info-500: 96 165 250;
+
+  --ring: 52 211 153;
+
+  --shadow-xs:   0 0 0 1px rgb(var(--line));
+  --shadow-card: 0 1px 0 rgb(0 0 0 / 0.4), 0 0 0 1px rgb(var(--line));
+  --shadow-pill: 0 1px 2px rgb(0 0 0 / 0.5), 0 0 0 1px rgb(var(--line));
+  --shadow-md:   0 4px 12px -2px rgb(0 0 0 / 0.5), 0 0 0 1px rgb(var(--line));
+  --shadow-lg:   0 12px 32px -8px rgb(0 0 0 / 0.6), 0 0 0 1px rgb(var(--line));
+}
+
+@layer base {
+  body {
+    background: rgb(var(--canvas));
+    color: rgb(var(--ink));
+    /* Inter is loaded in the root layout but was never actually applied —
+       wire the font variable into the body so the type scale uses it. */
+    font-family: var(--font-inter), ui-sans-serif, system-ui, -apple-system,
+      "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+}
+
+@layer utilities {
+  .num {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Keyboard-only focus ring. Referenced by nearly every interactive element
+     across the app but previously NEVER defined — so there were no visible
+     focus styles at all. Uses `outline` (not box-shadow) so it never clobbers
+     an element's existing card/pill shadow, and follows the element's radius. */
+  .focus-ring {
+    outline: none;
+  }
+  .focus-ring:focus-visible {
+    outline: 2px solid rgb(var(--ring));
+    outline-offset: 2px;
+  }
 }

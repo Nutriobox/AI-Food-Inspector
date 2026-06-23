@@ -10,5 +10,5 @@ export async function GET(req: NextRequest) {
     startDate: sp.get("startDate") ?? undefined,
     endDate: sp.get("endDate") ?? undefined,
   };
-  return NextResponse.json({ rows: getRecentOrders(f, 100) });
+  return NextResponse.json({ rows: await getRecentOrders(f, 100) });
 }

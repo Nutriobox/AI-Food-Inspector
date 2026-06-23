@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
       startDate: sp.get("startDate") ?? undefined,
       endDate: sp.get("endDate") ?? undefined,
     };
-    return NextResponse.json({ rows: getDishStats(f) });
+    return NextResponse.json({ rows: await getDishStats(f) });
   }
-  return NextResponse.json({ rows: listDishes() });
+  return NextResponse.json({ rows: await listDishes() });
 }

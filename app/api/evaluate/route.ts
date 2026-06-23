@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
   try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
   const parsed = Schema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.format() }, { status: 400 });
-  const id = createEvaluation({
+  const id = await createEvaluation({
     orderItemId: parsed.data.orderItemId,
     managerId: parsed.data.managerId ?? null,
     score: parsed.data.score,

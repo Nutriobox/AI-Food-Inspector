@@ -1,4 +1,4 @@
-import { db } from "./client";
+import { q, one, run } from "./client";
 
 export type Filters = {
   restaurant?: string;
@@ -26,96 +26,89 @@ function buildOrderWhere(f: Filters) {
   return { where: where.join(" AND "), params };
 }
 
-export function getKpis(f: Filters) {
+export async function getKpis(f: Filters) {
   const { where, params } = buildOrderWhere(f);
-  const conn = db();
-  const totalOrders = conn
-    .prepare(`SELECT COUNT(*) as c FROM orders o JOIN restaurants r ON r.id = o.restaurant_id WHERE ${where}`)
-    .get(...params) as { c: number };
-  const evaluatedItems = conn
-    .prepare(
-      `SELECT COUNT(DISTINCT oi.order_id) as c
-       FROM order_items oi
-       JOIN orders o ON o.id = oi.order_id
-       JOIN restaurants r ON r.id = o.restaurant_id
-       WHERE ${where} AND EXISTS (SELECT 1 FROM evaluations e WHERE e.order_item_id = oi.id)`
-    )
-    .get(...params) as { c: number };
-  const evaluated = evaluatedItems.c;
-  const total = totalOrders.c;
+  const totalOrders = await one<{ c: number }>(
+    `SELECT COUNT(*)::int as c FROM orders o JOIN restaurants r ON r.id = o.restaurant_id WHERE ${where}`,
+    params
+  );
+  const evaluatedItems = await one<{ c: number }>(
+    `SELECT COUNT(DISTINCT oi.order_id)::int as c
+     FROM order_items oi
+     JOIN orders o ON o.id = oi.order_id
+     JOIN restaurants r ON r.id = o.restaurant_id
+     WHERE ${where} AND EXISTS (SELECT 1 FROM evaluations e WHERE e.order_item_id = oi.id)`,
+    params
+  );
+  const total = totalOrders?.c ?? 0;
+  const evaluated = evaluatedItems?.c ?? 0;
   const missing = total - evaluated;
   const rate = total === 0 ? 0 : Math.round((evaluated / total) * 100);
   return { total, evaluated, missing, rate };
 }
 
-export function getDailySeries(f: Filters, kind: "orders" | "evals" | "errors") {
+export async function getDailySeries(f: Filters, kind: "orders" | "evals" | "errors") {
   const { where, params } = buildOrderWhere(f);
-  const conn = db();
   if (kind === "orders") {
-    return conn
-      .prepare(
-        `SELECT substr(o.placed_at, 1, 10) AS day, COUNT(*) AS y
-         FROM orders o JOIN restaurants r ON r.id = o.restaurant_id
-         WHERE ${where}
-         GROUP BY day ORDER BY day`
-      )
-      .all(...params) as { day: string; y: number }[];
+    return q<{ day: string; y: number }>(
+      `SELECT substr(o.placed_at, 1, 10) AS day, COUNT(*)::int AS y
+       FROM orders o JOIN restaurants r ON r.id = o.restaurant_id
+       WHERE ${where}
+       GROUP BY day ORDER BY day`,
+      params
+    );
   }
   if (kind === "evals") {
-    return conn
-      .prepare(
-        `SELECT substr(e.created_at, 1, 10) AS day, COUNT(*) AS y
-         FROM evaluations e
-         JOIN order_items oi ON oi.id = e.order_item_id
-         JOIN orders o ON o.id = oi.order_id
-         JOIN restaurants r ON r.id = o.restaurant_id
-         WHERE ${where}
-         GROUP BY day ORDER BY day`
-      )
-      .all(...params) as { day: string; y: number }[];
-  }
-  return conn
-    .prepare(
-      `SELECT substr(e.created_at, 1, 10) AS day, COUNT(*) AS y
-       FROM evaluation_tags et
-       JOIN evaluations e ON e.id = et.evaluation_id
+    return q<{ day: string; y: number }>(
+      `SELECT substr(e.created_at, 1, 10) AS day, COUNT(*)::int AS y
+       FROM evaluations e
        JOIN order_items oi ON oi.id = e.order_item_id
        JOIN orders o ON o.id = oi.order_id
        JOIN restaurants r ON r.id = o.restaurant_id
        WHERE ${where}
-       GROUP BY day ORDER BY day`
-    )
-    .all(...params) as { day: string; y: number }[];
+       GROUP BY day ORDER BY day`,
+      params
+    );
+  }
+  return q<{ day: string; y: number }>(
+    `SELECT substr(e.created_at, 1, 10) AS day, COUNT(*)::int AS y
+     FROM evaluation_tags et
+     JOIN evaluations e ON e.id = et.evaluation_id
+     JOIN order_items oi ON oi.id = e.order_item_id
+     JOIN orders o ON o.id = oi.order_id
+     JOIN restaurants r ON r.id = o.restaurant_id
+     WHERE ${where}
+     GROUP BY day ORDER BY day`,
+    params
+  );
 }
 
-export function getRecentOrders(f: Filters, limit = 50) {
+export async function getRecentOrders(f: Filters, limit = 50) {
   const { where, params } = buildOrderWhere(f);
-  const conn = db();
-  const rows = conn
-    .prepare(
-      `SELECT o.id, o.code, o.placed_at, o.status,
-              r.name AS restaurant,
-              GROUP_CONCAT(d.name, ', ') AS dishes,
-              EXISTS(SELECT 1 FROM evaluations e
-                     JOIN order_items oi2 ON oi2.id = e.order_item_id
-                     WHERE oi2.order_id = o.id) AS evaluated,
-              (SELECT m.name FROM evaluations e
-                 JOIN order_items oi3 ON oi3.id = e.order_item_id
-                 JOIN managers m ON m.id = e.manager_id
-                 WHERE oi3.order_id = o.id LIMIT 1) AS manager,
-              (SELECT e.status FROM evaluations e
-                 JOIN order_items oi4 ON oi4.id = e.order_item_id
-                 WHERE oi4.order_id = o.id ORDER BY e.created_at DESC LIMIT 1) AS score
-       FROM orders o
-       JOIN restaurants r ON r.id = o.restaurant_id
-       JOIN order_items oi ON oi.order_id = o.id
-       JOIN dishes d ON d.id = oi.dish_id
-       WHERE ${where}
-       GROUP BY o.id
-       ORDER BY o.placed_at DESC
-       LIMIT ?`
-    )
-    .all(...params, limit) as any[];
+  const rows = await q<any>(
+    `SELECT o.id, o.code, o.placed_at, o.status,
+            r.name AS restaurant,
+            string_agg(d.name, ', ') AS dishes,
+            EXISTS(SELECT 1 FROM evaluations e
+                   JOIN order_items oi2 ON oi2.id = e.order_item_id
+                   WHERE oi2.order_id = o.id) AS evaluated,
+            (SELECT m.name FROM evaluations e
+               JOIN order_items oi3 ON oi3.id = e.order_item_id
+               JOIN managers m ON m.id = e.manager_id
+               WHERE oi3.order_id = o.id LIMIT 1) AS manager,
+            (SELECT e.status FROM evaluations e
+               JOIN order_items oi4 ON oi4.id = e.order_item_id
+               WHERE oi4.order_id = o.id ORDER BY e.created_at DESC LIMIT 1) AS score
+     FROM orders o
+     JOIN restaurants r ON r.id = o.restaurant_id
+     JOIN order_items oi ON oi.order_id = o.id
+     JOIN dishes d ON d.id = oi.dish_id
+     WHERE ${where}
+     GROUP BY o.id, r.name
+     ORDER BY o.placed_at DESC
+     LIMIT ?`,
+    [...params, limit]
+  );
   return rows.map((r) => ({
     id: r.code,
     time: new Date(r.placed_at).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false }),
@@ -127,27 +120,25 @@ export function getRecentOrders(f: Filters, limit = 50) {
   }));
 }
 
-export function getEvaluations(f: Filters, limit = 50) {
+export async function getEvaluations(f: Filters, limit = 50) {
   const { where, params } = buildOrderWhere(f);
-  const conn = db();
-  const rows = conn
-    .prepare(
-      `SELECT e.id AS eid, e.score, e.created_at, e.status AS evstatus,
-              d.name AS dish,
-              m.name AS manager,
-              o.code AS order_code,
-              (SELECT GROUP_CONCAT(et.tag_code) FROM evaluation_tags et WHERE et.evaluation_id = e.id) AS tags
-       FROM evaluations e
-       JOIN order_items oi ON oi.id = e.order_item_id
-       JOIN orders o ON o.id = oi.order_id
-       JOIN restaurants r ON r.id = o.restaurant_id
-       JOIN dishes d ON d.id = oi.dish_id
-       LEFT JOIN managers m ON m.id = e.manager_id
-       WHERE ${where}
-       ORDER BY e.created_at DESC
-       LIMIT ?`
-    )
-    .all(...params, limit) as any[];
+  const rows = await q<any>(
+    `SELECT e.id AS eid, e.score, e.created_at, e.status AS evstatus,
+            d.name AS dish,
+            m.name AS manager,
+            o.code AS order_code,
+            (SELECT string_agg(et.tag_code, ',') FROM evaluation_tags et WHERE et.evaluation_id = e.id) AS tags
+     FROM evaluations e
+     JOIN order_items oi ON oi.id = e.order_item_id
+     JOIN orders o ON o.id = oi.order_id
+     JOIN restaurants r ON r.id = o.restaurant_id
+     JOIN dishes d ON d.id = oi.dish_id
+     LEFT JOIN managers m ON m.id = e.manager_id
+     WHERE ${where}
+     ORDER BY e.created_at DESC
+     LIMIT ?`,
+    [...params, limit]
+  );
   return rows.map((r) => ({
     id: `EVL-${String(r.eid).padStart(5, "0")}`,
     time: new Date(r.created_at).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false }),
@@ -158,98 +149,90 @@ export function getEvaluations(f: Filters, limit = 50) {
   }));
 }
 
-export function getIssueAggregate(f: Filters) {
+export async function getIssueAggregate(f: Filters) {
   const { where, params } = buildOrderWhere(f);
-  const conn = db();
-  return conn
-    .prepare(
-      `SELECT it.code, it.name, COUNT(*) AS count
-       FROM evaluation_tags et
-       JOIN issue_tags it ON it.code = et.tag_code
-       JOIN evaluations e ON e.id = et.evaluation_id
-       JOIN order_items oi ON oi.id = e.order_item_id
-       JOIN orders o ON o.id = oi.order_id
-       JOIN restaurants r ON r.id = o.restaurant_id
-       WHERE ${where}
-       GROUP BY it.code
-       ORDER BY count DESC`
-    )
-    .all(...params) as { code: string; name: string; count: number }[];
+  return q<{ code: string; name: string; count: number }>(
+    `SELECT it.code, it.name, COUNT(*)::int AS count
+     FROM evaluation_tags et
+     JOIN issue_tags it ON it.code = et.tag_code
+     JOIN evaluations e ON e.id = et.evaluation_id
+     JOIN order_items oi ON oi.id = e.order_item_id
+     JOIN orders o ON o.id = oi.order_id
+     JOIN restaurants r ON r.id = o.restaurant_id
+     WHERE ${where}
+     GROUP BY it.code
+     ORDER BY count DESC`,
+    params
+  );
 }
 
-export function getDishStats(f: Filters) {
+export async function getDishStats(f: Filters) {
   const { where, params } = buildOrderWhere(f);
-  const conn = db();
-  return conn
-    .prepare(
-      `SELECT d.id, d.name,
-              COUNT(oi.id) AS orders,
-              COUNT(e.id)  AS eval,
-              CASE WHEN COUNT(oi.id) = 0 THEN 0
-                   ELSE ROUND(100.0 * COUNT(e.id) / COUNT(oi.id))
-              END AS rate,
-              (SELECT COUNT(*) FROM evaluation_tags et
-                 JOIN evaluations e2 ON e2.id = et.evaluation_id
-                 JOIN order_items oi2 ON oi2.id = e2.order_item_id
-                 JOIN orders o2 ON o2.id = oi2.order_id
-                 JOIN restaurants r2 ON r2.id = o2.restaurant_id
-                 WHERE oi2.dish_id = d.id AND ${where.replace(/o\./g, "o2.").replace(/r\./g, "r2.")}) AS errors
-       FROM dishes d
-       LEFT JOIN order_items oi ON oi.dish_id = d.id
-       LEFT JOIN orders o ON o.id = oi.order_id
-       LEFT JOIN restaurants r ON r.id = o.restaurant_id
-       LEFT JOIN evaluations e ON e.order_item_id = oi.id
-       WHERE ${where}
-       GROUP BY d.id
-       ORDER BY orders DESC`
-    )
-    .all(...params, ...params) as any[];
+  const where2 = where.replace(/o\./g, "o2.").replace(/r\./g, "r2.");
+  return q<any>(
+    `SELECT d.id, d.name,
+            COUNT(oi.id)::int AS orders,
+            COUNT(e.id)::int  AS eval,
+            CASE WHEN COUNT(oi.id) = 0 THEN 0
+                 ELSE ROUND(100.0 * COUNT(e.id) / COUNT(oi.id))::int
+            END AS rate,
+            (SELECT COUNT(*)::int FROM evaluation_tags et
+               JOIN evaluations e2 ON e2.id = et.evaluation_id
+               JOIN order_items oi2 ON oi2.id = e2.order_item_id
+               JOIN orders o2 ON o2.id = oi2.order_id
+               JOIN restaurants r2 ON r2.id = o2.restaurant_id
+               WHERE oi2.dish_id = d.id AND ${where2}) AS errors
+     FROM dishes d
+     LEFT JOIN order_items oi ON oi.dish_id = d.id
+     LEFT JOIN orders o ON o.id = oi.order_id
+     LEFT JOIN restaurants r ON r.id = o.restaurant_id
+     LEFT JOIN evaluations e ON e.order_item_id = oi.id
+     WHERE ${where}
+     GROUP BY d.id
+     ORDER BY orders DESC`,
+    [...params, ...params]
+  );
 }
 
-export function getManagerStats() {
-  const conn = db();
-  return conn
-    .prepare(
-      `SELECT m.id, m.name, r.name AS restaurant,
-              COUNT(e.id) AS evals,
-              (SELECT COUNT(*) FROM evaluation_tags et
-                 JOIN evaluations e2 ON e2.id = et.evaluation_id
-                 WHERE e2.manager_id = m.id) AS errors,
-              CASE WHEN COUNT(e.id) = 0 THEN 0
-                   ELSE ROUND(AVG(e.score)) END AS score
-       FROM managers m
-       JOIN restaurants r ON r.id = m.restaurant_id
-       LEFT JOIN evaluations e ON e.manager_id = m.id
-       GROUP BY m.id
-       ORDER BY evals DESC`
-    )
-    .all() as any[];
+export async function getManagerStats() {
+  return q<any>(
+    `SELECT m.id, m.name, r.name AS restaurant,
+            COUNT(e.id)::int AS evals,
+            (SELECT COUNT(*)::int FROM evaluation_tags et
+               JOIN evaluations e2 ON e2.id = et.evaluation_id
+               WHERE e2.manager_id = m.id) AS errors,
+            CASE WHEN COUNT(e.id) = 0 THEN 0
+                 ELSE ROUND(AVG(e.score))::int END AS score
+     FROM managers m
+     JOIN restaurants r ON r.id = m.restaurant_id
+     LEFT JOIN evaluations e ON e.manager_id = m.id
+     GROUP BY m.id, r.name
+     ORDER BY evals DESC`
+  );
 }
 
-export function getRestaurantStats(f: Filters) {
+export async function getRestaurantStats(f: Filters) {
   const { where, params } = buildOrderWhere(f);
-  const conn = db();
-  return conn
-    .prepare(
-      `SELECT r.id, r.name,
-              COUNT(DISTINCT o.id) AS orders,
-              COUNT(DISTINCT e.id) AS eval,
-              CASE WHEN COUNT(DISTINCT o.id) = 0 THEN 0
-                   ELSE ROUND(100.0 * COUNT(DISTINCT e.id) / COUNT(DISTINCT o.id)) END AS rate,
-              (SELECT COUNT(*) FROM evaluation_tags et
-                 JOIN evaluations e2 ON e2.id = et.evaluation_id
-                 JOIN order_items oi2 ON oi2.id = e2.order_item_id
-                 JOIN orders o2 ON o2.id = oi2.order_id
-                 WHERE o2.restaurant_id = r.id) AS errors
-       FROM restaurants r
-       LEFT JOIN orders o ON o.restaurant_id = r.id
-       LEFT JOIN order_items oi ON oi.order_id = o.id
-       LEFT JOIN evaluations e ON e.order_item_id = oi.id
-       WHERE ${where}
-       GROUP BY r.id
-       ORDER BY orders DESC`
-    )
-    .all(...params) as any[];
+  return q<any>(
+    `SELECT r.id, r.name,
+            COUNT(DISTINCT o.id)::int AS orders,
+            COUNT(DISTINCT e.id)::int AS eval,
+            CASE WHEN COUNT(DISTINCT o.id) = 0 THEN 0
+                 ELSE ROUND(100.0 * COUNT(DISTINCT e.id) / COUNT(DISTINCT o.id))::int END AS rate,
+            (SELECT COUNT(*)::int FROM evaluation_tags et
+               JOIN evaluations e2 ON e2.id = et.evaluation_id
+               JOIN order_items oi2 ON oi2.id = e2.order_item_id
+               JOIN orders o2 ON o2.id = oi2.order_id
+               WHERE o2.restaurant_id = r.id) AS errors
+     FROM restaurants r
+     LEFT JOIN orders o ON o.restaurant_id = r.id
+     LEFT JOIN order_items oi ON oi.order_id = o.id
+     LEFT JOIN evaluations e ON e.order_item_id = oi.id
+     WHERE ${where}
+     GROUP BY r.id
+     ORDER BY orders DESC`,
+    params
+  );
 }
 
 export type LiveOrder = {
@@ -265,22 +248,21 @@ export type LiveOrder = {
   items: { id: number; dish_id: number; dish: string; category: string; quantity: number; reference_image: string | null; evaluated: boolean; isAddon: boolean }[];
 };
 
-// Categories that are treated as add-ons (rendered indented under the main items).
 const ADDON_CATEGORIES = new Set(["Add-Ons", "Extras"]);
 
-function buildOrders(rows: any[]): LiveOrder[] {
-  const conn = db();
-  const itemsStmt = conn.prepare(
-    `SELECT oi.id, oi.dish_id, d.name AS dish, d.category, oi.quantity, d.reference_image,
-            EXISTS(SELECT 1 FROM evaluations e WHERE e.order_item_id = oi.id) AS evaluated
-     FROM order_items oi
-     JOIN dishes d ON d.id = oi.dish_id
-     WHERE oi.order_id = ?`
-  );
+async function buildOrders(rows: any[]): Promise<LiveOrder[]> {
   const now = Date.now();
-  return rows.map((o) => {
-    const items = itemsStmt.all(o.id) as any[];
-    return {
+  const out: LiveOrder[] = [];
+  for (const o of rows) {
+    const items = await q<any>(
+      `SELECT oi.id, oi.dish_id, d.name AS dish, d.category, oi.quantity, d.reference_image,
+              EXISTS(SELECT 1 FROM evaluations e WHERE e.order_item_id = oi.id) AS evaluated
+       FROM order_items oi
+       JOIN dishes d ON d.id = oi.dish_id
+       WHERE oi.order_id = ?`,
+      [o.id]
+    );
+    out.push({
       id: o.id,
       code: o.code,
       restaurant: o.restaurant,
@@ -300,87 +282,79 @@ function buildOrders(rows: any[]): LiveOrder[] {
         evaluated: !!i.evaluated,
         isAddon: ADDON_CATEGORIES.has(i.category),
       })),
-    };
-  });
+    });
+  }
+  return out;
 }
 
-export function getLiveOrders(restaurant?: string): LiveOrder[] {
-  const conn = db();
+export async function getLiveOrders(restaurant?: string): Promise<LiveOrder[]> {
   const where: string[] = ["o.status != 'served'"];
   const params: any[] = [];
   if (restaurant && restaurant !== "All Restaurants") {
     where.push("r.name = ?");
     params.push(restaurant);
   }
-  const orders = conn
-    .prepare(
-      `SELECT o.id, o.code, o.placed_at, o.status, o.table_no, o.customer, o.channel, r.name AS restaurant
-       FROM orders o
-       JOIN restaurants r ON r.id = o.restaurant_id
-       WHERE ${where.join(" AND ")}
-       ORDER BY o.placed_at DESC
-       LIMIT 30`
-    )
-    .all(...params) as any[];
+  const orders = await q<any>(
+    `SELECT o.id, o.code, o.placed_at, o.status, o.table_no, o.customer, o.channel, r.name AS restaurant
+     FROM orders o
+     JOIN restaurants r ON r.id = o.restaurant_id
+     WHERE ${where.join(" AND ")}
+     ORDER BY o.placed_at DESC
+     LIMIT 30`,
+    params
+  );
   return buildOrders(orders);
 }
 
-// Past orders = served orders placed before today (most recent first).
-export function getPastOrders(restaurant?: string): LiveOrder[] {
-  const conn = db();
-  const where: string[] = ["o.status = 'served'", "substr(o.placed_at,1,10) < date('now','localtime')"];
+export async function getPastOrders(restaurant?: string): Promise<LiveOrder[]> {
+  const where: string[] = ["o.status = 'served'", "substr(o.placed_at,1,10) < to_char(now(),'YYYY-MM-DD')"];
   const params: any[] = [];
   if (restaurant && restaurant !== "All Restaurants") {
     where.push("r.name = ?");
     params.push(restaurant);
   }
-  const orders = conn
-    .prepare(
-      `SELECT o.id, o.code, o.placed_at, o.status, o.table_no, o.customer, o.channel, r.name AS restaurant
-       FROM orders o
-       JOIN restaurants r ON r.id = o.restaurant_id
-       WHERE ${where.join(" AND ")}
-       ORDER BY o.placed_at DESC
-       LIMIT 60`
-    )
-    .all(...params) as any[];
+  const orders = await q<any>(
+    `SELECT o.id, o.code, o.placed_at, o.status, o.table_no, o.customer, o.channel, r.name AS restaurant
+     FROM orders o
+     JOIN restaurants r ON r.id = o.restaurant_id
+     WHERE ${where.join(" AND ")}
+     ORDER BY o.placed_at DESC
+     LIMIT 60`,
+    params
+  );
   return buildOrders(orders);
 }
 
-export function getOrderItemDetail(orderItemId: number) {
-  const conn = db();
-  return conn
-    .prepare(
-      `SELECT oi.id, oi.quantity, d.id AS dish_id, d.name AS dish, d.expected_grams, d.reference_image, d.monitored_tags,
-              o.code AS order_code, r.name AS restaurant
-       FROM order_items oi
-       JOIN dishes d ON d.id = oi.dish_id
-       JOIN orders o ON o.id = oi.order_id
-       JOIN restaurants r ON r.id = o.restaurant_id
-       WHERE oi.id = ?`
-    )
-    .get(orderItemId) as any;
+export async function getOrderItemDetail(orderItemId: number) {
+  return one<any>(
+    `SELECT oi.id, oi.quantity, d.id AS dish_id, d.name AS dish, d.expected_grams, d.reference_image, d.monitored_tags,
+            o.code AS order_code, r.name AS restaurant
+     FROM order_items oi
+     JOIN dishes d ON d.id = oi.dish_id
+     JOIN orders o ON o.id = oi.order_id
+     JOIN restaurants r ON r.id = o.restaurant_id
+     WHERE oi.id = ?`,
+    [orderItemId]
+  );
 }
 
-export function listDishes() {
-  return db()
-    .prepare(
-      `SELECT d.*,
-              (SELECT COUNT(oi.id) FROM order_items oi WHERE oi.dish_id = d.id) AS orders,
-              (SELECT COUNT(e.id) FROM evaluations e
-                 JOIN order_items oi ON oi.id = e.order_item_id
-                 WHERE oi.dish_id = d.id) AS eval
-       FROM dishes d
-       ORDER BY d.name`
-    )
-    .all() as any[];
+export async function listDishes() {
+  return q<any>(
+    `SELECT d.*,
+            (SELECT COUNT(oi.id)::int FROM order_items oi WHERE oi.dish_id = d.id) AS orders,
+            (SELECT COUNT(e.id)::int FROM evaluations e
+               JOIN order_items oi ON oi.id = e.order_item_id
+               WHERE oi.dish_id = d.id) AS eval
+     FROM dishes d
+     ORDER BY d.name`
+  );
 }
 
-export function listRestaurants() {
-  return db().prepare("SELECT * FROM restaurants ORDER BY name").all() as any[];
+export async function listRestaurants() {
+  return q<any>("SELECT * FROM restaurants ORDER BY name");
 }
 
-export function createEvaluation(input: {
+export async function createEvaluation(input: {
   orderItemId: number;
   managerId?: number | null;
   score: number;
@@ -391,13 +365,10 @@ export function createEvaluation(input: {
   notes?: string | null;
   tags?: string[];
 }) {
-  const conn = db();
-  const info = conn
-    .prepare(
-      `INSERT INTO evaluations (order_item_id, manager_id, score, status, weight_g, temperature_c, image, notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-    )
-    .run(
+  const row = await one<{ id: number }>(
+    `INSERT INTO evaluations (order_item_id, manager_id, score, status, weight_g, temperature_c, image, notes)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+    [
       input.orderItemId,
       input.managerId ?? null,
       input.score,
@@ -405,36 +376,38 @@ export function createEvaluation(input: {
       input.weight_g ?? null,
       input.temperature_c ?? null,
       input.image ?? null,
-      input.notes ?? null
-    );
-  const evalId = info.lastInsertRowid as number;
+      input.notes ?? null,
+    ]
+  );
+  const evalId = row!.id;
   if (input.tags?.length) {
-    const tagStmt = conn.prepare(
-      "INSERT OR IGNORE INTO evaluation_tags (evaluation_id, tag_code) VALUES (?, ?)"
-    );
-    for (const t of input.tags) tagStmt.run(evalId, t);
+    for (const t of input.tags) {
+      await run(
+        "INSERT INTO evaluation_tags (evaluation_id, tag_code) VALUES (?, ?) ON CONFLICT DO NOTHING",
+        [evalId, t]
+      );
+    }
   }
   return evalId;
 }
 
-export function updateOrderStatus(orderId: number, status: string) {
-  return db().prepare("UPDATE orders SET status = ? WHERE id = ?").run(status, orderId);
+export async function updateOrderStatus(orderId: number, status: string) {
+  return run("UPDATE orders SET status = ? WHERE id = ?", [status, orderId]);
 }
 
-export function getDishById(id: number) {
-  return db()
-    .prepare(
-      `SELECT d.*,
-              (SELECT COUNT(oi.id) FROM order_items oi WHERE oi.dish_id = d.id) AS orders,
-              (SELECT COUNT(e.id) FROM evaluations e
-                 JOIN order_items oi ON oi.id = e.order_item_id
-                 WHERE oi.dish_id = d.id) AS eval
-       FROM dishes d WHERE d.id = ?`
-    )
-    .get(id) as any;
+export async function getDishById(id: number) {
+  return one<any>(
+    `SELECT d.*,
+            (SELECT COUNT(oi.id)::int FROM order_items oi WHERE oi.dish_id = d.id) AS orders,
+            (SELECT COUNT(e.id)::int FROM evaluations e
+               JOIN order_items oi ON oi.id = e.order_item_id
+               WHERE oi.dish_id = d.id) AS eval
+     FROM dishes d WHERE d.id = ?`,
+    [id]
+  );
 }
 
-export function updateDish(
+export async function updateDish(
   id: number,
   patch: {
     name?: string;
@@ -453,19 +426,16 @@ export function updateDish(
     ai_criteria?: string[] | null;
   }
 ) {
-  const conn = db();
-  const cur = conn.prepare("SELECT * FROM dishes WHERE id = ?").get(id) as any;
+  const cur = await one<any>("SELECT * FROM dishes WHERE id = ?", [id]);
   if (!cur) return null;
   const pick = <T>(v: T | undefined, fallback: T): T => (v === undefined ? fallback : v);
-  conn
-    .prepare(
-      `UPDATE dishes SET name = ?, category = ?, expected_grams = ?, reference_image = ?,
-              description = ?, pp_item_id = ?, swiggy_item_id = ?, zomato_item_id = ?,
-              bench_garnish = ?, bench_hygiene = ?, bench_portion = ?, bench_plating = ?,
-              ai_criteria = ?, monitored_tags = ?
-       WHERE id = ?`
-    )
-    .run(
+  await run(
+    `UPDATE dishes SET name = ?, category = ?, expected_grams = ?, reference_image = ?,
+            description = ?, pp_item_id = ?, swiggy_item_id = ?, zomato_item_id = ?,
+            bench_garnish = ?, bench_hygiene = ?, bench_portion = ?, bench_plating = ?,
+            ai_criteria = ?, monitored_tags = ?
+     WHERE id = ?`,
+    [
       patch.name ?? cur.name,
       patch.category ?? cur.category,
       patch.expected_grams ?? cur.expected_grams,
@@ -480,7 +450,39 @@ export function updateDish(
       pick(patch.bench_plating, cur.bench_plating),
       patch.ai_criteria ? JSON.stringify(patch.ai_criteria) : cur.ai_criteria,
       patch.monitored_tags ? JSON.stringify(patch.monitored_tags) : cur.monitored_tags,
-      id
-    );
-  return conn.prepare("SELECT * FROM dishes WHERE id = ?").get(id);
+      id,
+    ]
+  );
+  return one<any>("SELECT * FROM dishes WHERE id = ?", [id]);
+}
+
+export async function insertAiScore(s: {
+  dish_id?: number | null;
+  dish_name?: string | null;
+  score?: number | null;
+  verdict?: string | null;
+  identified_as?: string | null;
+  matches_expected?: number;
+  summary?: string | null;
+  criteria_json?: string | null;
+}) {
+  const row = await one<{ id: number }>(
+    `INSERT INTO ai_scores (dish_id, dish_name, score, verdict, identified_as, matches_expected, summary, criteria_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+    [
+      s.dish_id ?? null,
+      s.dish_name ?? null,
+      s.score ?? null,
+      s.verdict ?? null,
+      s.identified_as ?? null,
+      s.matches_expected ?? 0,
+      s.summary ?? null,
+      s.criteria_json ?? null,
+    ]
+  );
+  return row!.id;
+}
+
+export async function listAiScores(limit = 20) {
+  return q<any>("SELECT * FROM ai_scores ORDER BY id DESC LIMIT ?", [limit]);
 }
