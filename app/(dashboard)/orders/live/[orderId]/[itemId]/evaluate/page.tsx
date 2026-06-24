@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { Camera, ChevronLeft, RotateCcw } from "lucide-react";
+import { Camera, Check, ChevronLeft, RotateCcw, Sparkles, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { TAG_GLOSSARY, type IssueTag } from "@/lib/mock-data";
-import { api, apiPost } from "@/lib/api";
+import { type IssueTag } from "@/lib/mock-data";
+import { api } from "@/lib/api";
 import { getCapture, saveCapture, deleteCapture } from "@/lib/captures";
 import dishImages from "@/lib/dish-images.json";
 import { cn } from "@/lib/utils";
@@ -15,20 +16,42 @@ import { cn } from "@/lib/utils";
 type ItemDetail = {
   id: number; quantity: number; dish_id: number; dish: string;
   expected_grams: number; reference_image: string | null;
-  monitored_tags: IssueTag[]; order_code: string; restaurant: string;
+  monitored_tags: IssueTag[]; category: string; ai_criteria: string | null;
+  order_code: string; restaurant: string;
 };
+
+type CriterionResult = { criterion: string; pass: boolean; reason: string };
+type ScoreResult = {
+  identifiedAs?: string; matchesExpected?: boolean;
+  criteria?: CriterionResult[]; overallScore?: number;
+  verdict?: "Pass" | "Warn" | "Fail"; summary?: string;
+};
+
+const VERDICT: Record<string, { bg: string; fg: string }> = {
+  Pass: { bg: "#EAF3DE", fg: "#27500A" },
+  Warn: { bg: "#FAEEDA", fg: "#633806" },
+  Fail: { bg: "#FCEBEB", fg: "#791F1F" },
+};
+
+function parseCriteria(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  try { const a = JSON.parse(raw); if (Array.isArray(a)) return a.map((x) => String(x)); } catch {}
+  return [];
+}
 
 export default function EvaluatePage() {
   const params = useParams<{ orderId: string; itemId: string }>();
   const router = useRouter();
   const search = useSearchParams();
-  const dishParam = search.get("dish"); // fallback dish name passed from the KDS card
+  const dishParam = search.get("dish");
   const qc = useQueryClient();
   const itemId = parseInt(params.itemId, 10);
+  const orderId = params.orderId;
 
   const { data: item } = useQuery({
     queryKey: ["item", itemId],
     queryFn: () => api<ItemDetail>(`/api/kds/order-item/${itemId}`),
+    retry: false,
   });
 
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -37,23 +60,22 @@ export default function EvaluatePage() {
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [activeDeviceId, setActiveDeviceId] = useState<string>("");
   const [streamErr, setStreamErr] = useState<string | null>(null);
-  const [snapshot, setSnapshot] = useState<string | null>(null);
 
   const [weight, setWeight] = useState<number>(0);
   const [temp, setTemp] = useState<number>(0);
 
-  const [score, setScore] = useState<number>(85);
-  const [tags, setTags] = useState<Set<IssueTag>>(new Set());
-  const [notes, setNotes] = useState("");
+  const [captured, setCaptured] = useState<string | null>(null);
+  const [aiResult, setAiResult] = useState<ScoreResult | null>(null);
+  const [scoring, setScoring] = useState(false);
+  const [scoreError, setScoreError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
-  // Fully stop and release any active camera stream.
   function stopStream() {
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
     if (videoRef.current) videoRef.current.srcObject = null;
   }
 
-  // Enumerate cameras once and pick a default device.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -62,7 +84,6 @@ export default function EvaluatePage() {
         const list = await navigator.mediaDevices.enumerateDevices();
         const cams = list.filter((d) => d.kind === "videoinput");
         const initialId = probe.getVideoTracks()[0]?.getSettings().deviceId ?? cams[0]?.deviceId ?? "";
-        // Release the probe stream; the device effect opens the real one.
         probe.getTracks().forEach((t) => t.stop());
         if (cancelled) return;
         setDevices(cams);
@@ -71,11 +92,9 @@ export default function EvaluatePage() {
         if (!cancelled) setStreamErr(err?.message ?? "Could not access webcam.");
       }
     })();
-    // Safety net: ensure the camera is off when leaving the page.
     return () => { cancelled = true; stopStream(); };
   }, []);
 
-  // Open the stream for the selected device; release it on change/unmount.
   useEffect(() => {
     if (!activeDeviceId) return;
     let cancelled = false;
@@ -85,15 +104,13 @@ export default function EvaluatePage() {
       .then((stream) => {
         if (cancelled) { stream.getTracks().forEach((t) => t.stop()); return; }
         streamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          videoRef.current.play().catch(() => {});
-        }
+        if (videoRef.current) { videoRef.current.srcObject = stream; videoRef.current.play().catch(() => {}); }
       })
       .catch((err) => { if (!cancelled) setStreamErr(err?.message ?? "Camera error"); });
     return () => { cancelled = true; stopStream(); };
   }, [activeDeviceId]);
 
+  // Simulated machine readings (weight scale + temperature) until the hardware API is wired in.
   useEffect(() => {
     const id = setInterval(() => {
       setWeight((w) => Math.max(0, Math.min(500, w + Math.round((Math.random() - 0.5) * 8))));
@@ -102,15 +119,10 @@ export default function EvaluatePage() {
     return () => clearInterval(id);
   }, []);
 
-  const orderId = params.orderId;
-  // Previously captured photo for this order+item (null if none yet).
-  const [captured, setCaptured] = useState<string | null>(null);
   useEffect(() => {
     setCaptured(getCapture(orderId, itemId)?.dataUrl ?? null);
   }, [orderId, itemId]);
 
-  // Expected image: from the DB dish record, else looked up by dish name from
-  // the QA dish-image map (so it works for sample orders too).
   const DISH_IMAGES = dishImages as Record<string, string>;
   const dishName = item?.dish ?? dishParam ?? "";
   const expectedImg =
@@ -118,7 +130,6 @@ export default function EvaluatePage() {
       ? item.reference_image
       : (dishName && DISH_IMAGES[dishName]) || null;
 
-  // Grab the current live frame as a JPEG data URL.
   function grabFrame(): string | null {
     const v = videoRef.current; const c = canvasRef.current;
     if (!v || !c) return null;
@@ -129,45 +140,98 @@ export default function EvaluatePage() {
     return c.toDataURL("image/jpeg", 0.85);
   }
 
-  // First capture: save and return to the KDS.
+  async function runScore(image: string) {
+    setScoring(true); setScoreError(null); setAiResult(null);
+    try {
+      const res = await fetch("/api/score", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          image,
+          criteria: parseCriteria(item?.ai_criteria),
+          dishName, category: item?.category, expectedGrams: item?.expected_grams,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) setScoreError((json?.error ?? "Scoring failed") + (json?.detail ? `  —  ${json.detail}` : ""));
+      else setAiResult(json.result as ScoreResult);
+    } catch (e: any) {
+      setScoreError("Request failed: " + (e?.message ?? "unknown"));
+    } finally {
+      setScoring(false);
+    }
+  }
+
   function handleCapture() {
     const d = grabFrame();
     if (!d) { toast.error("Camera not ready"); return; }
     saveCapture(orderId, itemId, d);
-    toast.success("Photo captured");
-    router.push("/orders/live");
+    setCaptured(d);
+    toast.success("Photo captured — scoring…");
+    runScore(d);
   }
 
-  // Recapture: delete the old photo for this order+item and save the new one.
   function handleRecapture() {
     const d = grabFrame();
     if (!d) { toast.error("Camera not ready"); return; }
     deleteCapture(orderId, itemId);
     saveCapture(orderId, itemId, d);
     setCaptured(d);
-    toast.success("Photo recaptured");
+    setAiResult(null);
+    runScore(d);
   }
 
-  const submit = useMutation({
-    mutationFn: () => apiPost("/api/evaluate", {
-      orderItemId: itemId,
-      score,
-      status: score >= 85 ? "Pass" : score >= 70 ? "Warn" : "Fail",
-      weight_g: Math.round(weight),
-      temperature_c: Math.round(temp * 10) / 10,
-      image: snapshot,
-      notes,
-      tags: Array.from(tags),
-    }),
-    onSuccess: () => {
+  // Hardware checks (deterministic) — weight vs expected portion.
+  const weightOk = item ? Math.abs(weight - item.expected_grams) <= item.expected_grams * 0.15 : null;
+
+  async function saveEvaluation() {
+    if (!aiResult) return;
+    setSaving(true);
+    try {
+      if (item) {
+        // Real order item -> store an evaluation that feeds the dashboards.
+        const r = await fetch("/api/evaluate", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            orderItemId: itemId,
+            score: aiResult.overallScore ?? 0,
+            status: aiResult.verdict ?? (((aiResult.overallScore ?? 0) >= 85) ? "Pass" : (aiResult.overallScore ?? 0) >= 70 ? "Warn" : "Fail"),
+            weight_g: Math.round(weight),
+            temperature_c: Math.round(temp * 10) / 10,
+            image: captured,
+            notes: aiResult.summary ?? null,
+            tags: [],
+          }),
+        });
+        if (!r.ok) throw new Error("evaluation save failed");
+      }
+      // Always log the AI assessment.
+      await fetch("/api/ai-scores", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          dishId: item?.dish_id ?? null,
+          dishName: item?.dish ?? dishName,
+          score: aiResult.overallScore ?? null,
+          verdict: aiResult.verdict ?? null,
+          identifiedAs: aiResult.identifiedAs ?? null,
+          matchesExpected: aiResult.matchesExpected ?? false,
+          summary: aiResult.summary ?? null,
+          criteria: parseCriteria(item?.ai_criteria),
+        }),
+      });
       qc.invalidateQueries({ queryKey: ["kds"] });
       qc.invalidateQueries({ queryKey: ["evaluations"] });
       qc.invalidateQueries({ queryKey: ["overview"] });
+      qc.invalidateQueries({ queryKey: ["ai-scores"] });
       toast.success("Evaluation saved");
       router.push("/orders/live");
-    },
-    onError: (e: any) => toast.error(`Save failed: ${e?.message ?? "unknown"}`),
-  });
+    } catch (e: any) {
+      toast.error(`Save failed: ${e?.message ?? "unknown"}`);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const v = aiResult?.verdict && VERDICT[aiResult.verdict] ? VERDICT[aiResult.verdict] : null;
 
   return (
     <div className="space-y-4">
@@ -182,7 +246,16 @@ export default function EvaluatePage() {
 
       <div className="rounded-card bg-white shadow-card p-4">
         <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
-          <div><span className="text-muted">Weight</span> <span className="num font-semibold">{Math.round(weight)} g</span>{item && <span className="text-muted text-xs"> / target {item.expected_grams} g</span>}</div>
+          <div>
+            <span className="text-muted">Weight</span>{" "}
+            <span className="num font-semibold">{Math.round(weight)} g</span>
+            {item && <span className="text-muted text-xs"> / target {item.expected_grams} g</span>}
+            {weightOk !== null && (
+              <span className={cn("ml-1 text-xs", weightOk ? "text-emerald-700" : "text-rose-700")}>
+                {weightOk ? "✓" : "✗"}
+              </span>
+            )}
+          </div>
           <div><span className="text-muted">Temperature</span> <span className="num font-semibold">{temp.toFixed(1)} °C</span></div>
           <div className="ml-auto">
             <label className="text-xs text-muted">Camera</label>
@@ -194,17 +267,13 @@ export default function EvaluatePage() {
         </div>
 
         <div className={cn("grid grid-cols-1 gap-4 mt-4", captured ? "md:grid-cols-3" : "md:grid-cols-2")}>
-          {/* Expected image */}
           <div>
             <div className="text-xs uppercase tracking-wider text-muted mb-1.5">Expected image</div>
             <div className="aspect-video rounded-md bg-canvas border border-line overflow-hidden flex items-center justify-center">
-              {expectedImg
-                ? <img src={expectedImg} alt="expected" className="w-full h-full object-cover" />
-                : <span className="text-muted text-sm">No reference image</span>}
+              {expectedImg ? <img src={expectedImg} alt="expected" className="w-full h-full object-cover" /> : <span className="text-muted text-sm">No reference image</span>}
             </div>
           </div>
 
-          {/* Captured image (only when a photo already exists) */}
           {captured && (
             <div>
               <div className="text-xs uppercase tracking-wider text-muted mb-1.5">Captured image</div>
@@ -214,7 +283,6 @@ export default function EvaluatePage() {
             </div>
           )}
 
-          {/* Live camera */}
           <div>
             <div className="text-xs uppercase tracking-wider text-muted mb-1.5">Live image</div>
             <div className="aspect-video rounded-md bg-black overflow-hidden relative">
@@ -228,15 +296,71 @@ export default function EvaluatePage() {
           </div>
         </div>
 
-        {/* Capture / Recapture button centered below */}
         <div className="flex justify-center mt-4">
           {captured
-            ? <button onClick={handleRecapture} disabled={!!streamErr} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-btn bg-ink text-white text-sm font-semibold hover:opacity-90 disabled:opacity-50"><RotateCcw className="h-4 w-4" /> Recapture</button>
+            ? <button onClick={handleRecapture} disabled={!!streamErr || scoring} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-btn bg-ink text-white text-sm font-semibold hover:opacity-90 disabled:opacity-50"><RotateCcw className="h-4 w-4" /> Recapture</button>
             : <button onClick={handleCapture} disabled={!!streamErr} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-btn bg-ink text-white text-sm font-semibold hover:opacity-90 disabled:opacity-50"><Camera className="h-4 w-4" /> Capture</button>}
         </div>
 
         <canvas ref={canvasRef} className="hidden" />
       </div>
+
+      {/* AI assessment */}
+      {(scoring || aiResult || scoreError) && (
+        <div className="rounded-card bg-white shadow-card p-5">
+          <div className="flex items-center gap-2 font-semibold tracking-tight mb-3">
+            <Sparkles className="h-4 w-4 text-brand-600" /> AI assessment
+          </div>
+
+          {scoring && <div className="text-sm text-muted">Analyzing the captured photo…</div>}
+          {scoreError && <div className="rounded-md border border-rose-200 bg-rose-50 text-rose-700 text-xs p-3 whitespace-pre-wrap">{scoreError}</div>}
+
+          {aiResult && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="text-4xl font-semibold tracking-tight">{aiResult.overallScore ?? "—"}</div>
+                <div className="text-xs text-muted">/ 100 visual</div>
+                {v && <span className="ml-auto text-xs font-medium px-3 py-1.5 rounded-full" style={{ background: v.bg, color: v.fg }}>{aiResult.verdict}</span>}
+              </div>
+
+              <div className="text-xs text-muted">
+                Identified as: <span className="text-ink font-medium">{aiResult.identifiedAs ?? "—"}</span>{" · "}
+                {aiResult.matchesExpected ? <span className="text-emerald-700">matches expected item</span> : <span className="text-rose-700">does not match expected item</span>}
+              </div>
+
+              {/* hardware checks */}
+              <div className="flex flex-wrap gap-2 text-xs">
+                <span className={cn("inline-flex items-center gap-1 px-2 py-1 rounded-full", weightOk ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700")}>
+                  Weight {Math.round(weight)}g {weightOk ? "✓" : "✗"}
+                </span>
+                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-canvas text-muted">Temp {temp.toFixed(1)}°C</span>
+              </div>
+
+              {aiResult.summary && <div className="text-sm">{aiResult.summary}</div>}
+
+              <div className="space-y-2">
+                {(aiResult.criteria ?? []).map((c, i) => (
+                  <div key={i} className="flex items-start gap-2 border border-line rounded-md p-2.5">
+                    <span className={cn("shrink-0 h-5 w-5 rounded-full flex items-center justify-center mt-0.5", c.pass ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700")}>
+                      {c.pass ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
+                    </span>
+                    <div>
+                      <div className="text-sm font-medium">{c.criterion}</div>
+                      <div className="text-xs text-muted mt-0.5">{c.reason}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex justify-end">
+                <button onClick={saveEvaluation} disabled={saving} className="px-4 py-2 rounded-btn bg-brand-600 text-white text-sm font-medium hover:bg-brand-700 disabled:opacity-50">
+                  {saving ? "Saving…" : "Save evaluation & finish"}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

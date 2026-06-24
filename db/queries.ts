@@ -328,6 +328,7 @@ export async function getPastOrders(restaurant?: string): Promise<LiveOrder[]> {
 export async function getOrderItemDetail(orderItemId: number) {
   return one<any>(
     `SELECT oi.id, oi.quantity, d.id AS dish_id, d.name AS dish, d.expected_grams, d.reference_image, d.monitored_tags,
+            d.category, d.ai_criteria,
             o.code AS order_code, r.name AS restaurant
      FROM order_items oi
      JOIN dishes d ON d.id = oi.dish_id
