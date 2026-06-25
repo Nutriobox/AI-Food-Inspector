@@ -1,0 +1,18 @@
+[Unit]
+Description=Nutriobox load-cell weight service
+After=network.target
+
+[Service]
+Type=simple
+# Adjust the path/user to where you copy this folder on the Pi:
+WorkingDirectory=/home/pi/pi-weight-service
+ExecStart=/usr/bin/python3 /home/pi/pi-weight-service/weight_server.py
+Environment=HX711_DT=5
+Environment=HX711_SCK=6
+Environment=WEIGHT_PORT=8765
+Restart=always
+RestartSec=2
+User=pi
+
+[Install]
+WantedBy=multi-user.target

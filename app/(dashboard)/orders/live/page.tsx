@@ -176,7 +176,7 @@ export default function KdsPage() {
   }
 
   return (
-    <div className="w-screen mx-[calc(50%-50vw)] px-4 grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-4 lg:h-[calc(100vh-7rem)]">
+    <div className="w-screen mx-[calc(50%-50vw)] px-4 grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-4 lg:h-[calc(100vh-7rem)] select-none [-webkit-user-select:none] [-webkit-touch-callout:none] [touch-action:pan-y]">
       {/* Sidebar: Live/Past tabs + Item Summary */}
       <aside className="rounded-card bg-white shadow-card p-3 flex flex-col lg:h-full overflow-hidden">
         <div className="flex gap-1.5">
@@ -196,7 +196,7 @@ export default function KdsPage() {
 
         <div className="mt-4 pt-3 border-t border-line flex flex-col flex-1 min-h-0">
           <div className="px-1 mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted">Item Summary</div>
-          <ul className="space-y-0.5 flex-1 overflow-y-auto pr-1">
+          <ul className="space-y-0.5 flex-1 overflow-y-auto pr-1 [touch-action:pan-y] [-webkit-overflow-scrolling:touch] overscroll-contain">
             {itemSummary.map(([name, qty]) => (
               <li key={name} className="flex items-center justify-between gap-2 text-[13px] px-1 py-1 rounded-md hover:bg-canvas">
                 <span className="truncate text-ink">{name}</span>
@@ -211,7 +211,7 @@ export default function KdsPage() {
       </aside>
 
       {/* Main: order cards */}
-      <section className="lg:h-full lg:overflow-y-auto">
+      <section className="lg:h-full overflow-y-auto [touch-action:pan-y] [-webkit-overflow-scrolling:touch] overscroll-contain">
         {isLoading && orders.length === 0 ? (
           <div className="rounded-card bg-white shadow-card p-8 text-center text-muted text-sm">Loading orders…</div>
         ) : (
@@ -257,7 +257,7 @@ function OrderCard({ order, past, v }: { order: LiveOrder; past: boolean; v: num
       </div>
 
       {/* Items */}
-      <ul className="divide-y divide-line flex-1 min-h-0 overflow-y-auto">
+      <ul className="divide-y divide-line flex-1 min-h-0 overflow-y-auto [touch-action:pan-y] [-webkit-overflow-scrolling:touch] overscroll-contain">
         {mains.map((it) => {
           const captured = hasCapture(order.id, it.id);
           return (
@@ -273,11 +273,11 @@ function OrderCard({ order, past, v }: { order: LiveOrder; past: boolean; v: num
                 aria-label={captured ? `View photo of ${it.dish}` : `Capture ${it.dish}`}
                 title={captured ? "View / recapture photo" : "Capture photo"}
                 className={cn(
-                  "shrink-0 inline-flex h-7 w-7 items-center justify-center rounded-md border hover:bg-canvas",
+                  "shrink-0 inline-flex h-11 w-11 items-center justify-center rounded-lg border-2 active:scale-95 transition-transform hover:bg-canvas",
                   captured ? "border-brand-600 text-brand-600" : "border-line text-muted hover:text-ink"
                 )}
               >
-                {captured ? <Info className="h-3.5 w-3.5" /> : <Camera className="h-3.5 w-3.5" />}
+                {captured ? <Info className="h-5 w-5" /> : <Camera className="h-5 w-5" />}
               </Link>
             </div>
           </li>
@@ -297,18 +297,5 @@ function OrderCard({ order, past, v }: { order: LiveOrder; past: boolean; v: num
                 aria-label={captured ? `View photo of ${it.dish}` : `Capture ${it.dish}`}
                 title={captured ? "View / recapture photo" : "Capture photo"}
                 className={cn(
-                  "shrink-0 inline-flex h-6 w-6 items-center justify-center rounded-md border hover:bg-white",
-                  captured ? "border-brand-600 text-brand-600" : "border-line text-muted hover:text-ink"
-                )}
-              >
-                {captured ? <Info className="h-3 w-3" /> : <Camera className="h-3 w-3" />}
-              </Link>
-            </div>
-          </li>
-          );
-        })}
-        {order.items.length === 0 && <li className="px-3 py-3 text-xs text-muted">No items.</li>}
-      </ul>
-    </article>
-  );
-}
+                  "shrink-0 inline-flex h-10 w-10 items-center justify-center rounded-lg border-2 active:scale-95 transition-transform hover:bg-white",
+                  captured ? "border-brand-600 text-brand-60

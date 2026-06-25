@@ -110,13 +110,32 @@ export default function EvaluatePage() {
     return () => { cancelled = true; stopStream(); };
   }, [activeDeviceId]);
 
-  // Simulated machine readings (weight scale + temperature) until the hardware API is wired in.
+  // Live weight from the Pi load-cell service (http://127.0.0.1:8765/weight on the
+  // machine). Falls back to a simulated reading if that service is not reachable
+  // (e.g. during local development on a laptop).
   useEffect(() => {
-    const id = setInterval(() => {
-      setWeight((w) => Math.max(0, Math.min(500, w + Math.round((Math.random() - 0.5) * 8))));
-      setTemp((t) => Math.max(0, Math.min(95, t + (Math.random() - 0.5) * 1.2)));
-    }, 800);
-    return () => clearInterval(id);
+    const url = process.env.NEXT_PUBLIC_WEIGHT_URL || "http://127.0.0.1:8765/weight";
+    let active = true;
+    const tick = async () => {
+      try {
+        const r = await fetch(url, { cache: "no-store" });
+        if (r.ok) {
+          const j = await r.json();
+          if (active && j?.ok && typeof j.weight_g === "number") {
+            setWeight(j.weight_g);
+            if (typeof j.temperature_c === "number") setTemp(j.temperature_c);
+            return;
+          }
+        }
+      } catch {}
+      if (active) {
+        setWeight((w) => Math.max(0, Math.min(500, w + Math.round((Math.random() - 0.5) * 8))));
+        setTemp((t) => Math.max(0, Math.min(95, t + (Math.random() - 0.5) * 1.2)));
+      }
+    };
+    const id = setInterval(tick, 500);
+    tick();
+    return () => { active = false; clearInterval(id); };
   }, []);
 
   useEffect(() => {
