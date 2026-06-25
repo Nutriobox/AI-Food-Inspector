@@ -62,7 +62,6 @@ export default function EvaluatePage() {
   const [streamErr, setStreamErr] = useState<string | null>(null);
 
   const [weight, setWeight] = useState<number>(0);
-  const [temp, setTemp] = useState<number>(0);
 
   const [captured, setCaptured] = useState<string | null>(null);
   const [aiResult, setAiResult] = useState<ScoreResult | null>(null);
@@ -123,15 +122,12 @@ export default function EvaluatePage() {
           const j = await r.json();
           if (active && j?.ok && typeof j.weight_g === "number") {
             setWeight(j.weight_g);
-            if (typeof j.temperature_c === "number") setTemp(j.temperature_c);
             return;
           }
         }
       } catch {}
-      if (active) {
-        setWeight((w) => Math.max(0, Math.min(500, w + Math.round((Math.random() - 0.5) * 8))));
-        setTemp((t) => Math.max(0, Math.min(95, t + (Math.random() - 0.5) * 1.2)));
-      }
+      // Weight service not reachable -> show 0 (never a fake number).
+      if (active) setWeight(0);
     };
     const id = setInterval(tick, 500);
     tick();
@@ -215,7 +211,7 @@ export default function EvaluatePage() {
             score: aiResult.overallScore ?? 0,
             status: aiResult.verdict ?? (((aiResult.overallScore ?? 0) >= 85) ? "Pass" : (aiResult.overallScore ?? 0) >= 70 ? "Warn" : "Fail"),
             weight_g: Math.round(weight),
-            temperature_c: Math.round(temp * 10) / 10,
+            temperature_c: null,
             image: captured,
             notes: aiResult.summary ?? null,
             tags: [],
@@ -275,7 +271,6 @@ export default function EvaluatePage() {
               </span>
             )}
           </div>
-          <div><span className="text-muted">Temperature</span> <span className="num font-semibold">{temp.toFixed(1)} °C</span></div>
           <div className="ml-auto">
             <label className="text-xs text-muted">Camera</label>
             <select value={activeDeviceId} onChange={(e) => setActiveDeviceId(e.target.value)} className="ml-2 rounded-btn border border-line text-sm bg-white px-2 py-1 focus-ring">
@@ -352,7 +347,6 @@ export default function EvaluatePage() {
                 <span className={cn("inline-flex items-center gap-1 px-2 py-1 rounded-full", weightOk ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700")}>
                   Weight {Math.round(weight)}g {weightOk ? "✓" : "✗"}
                 </span>
-                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-canvas text-muted">Temp {temp.toFixed(1)}°C</span>
               </div>
 
               {aiResult.summary && <div className="text-sm">{aiResult.summary}</div>}
