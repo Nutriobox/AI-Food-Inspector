@@ -90,3 +90,20 @@ CREATE TABLE IF NOT EXISTS ai_scores (
   criteria_json    TEXT,
   created_at       TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- Petpooja live order feed (added for webhook integration)
+-- restaurants.pp_rest_id maps a Petpooja outlet ID to a Nutriobox outlet.
+ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS pp_rest_id TEXT;
+
+-- Raw capture of every incoming Petpooja webhook call (for inspection/debugging).
+CREATE TABLE IF NOT EXISTS petpooja_events (
+  id              SERIAL PRIMARY KEY,
+  received_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  token_ok        BOOLEAN NOT NULL DEFAULT false,
+  rest_id         TEXT,
+  pp_order_id     TEXT,
+  channel         TEXT,
+  mapped_order_id INTEGER,
+  note            TEXT,
+  raw             JSONB
+);
