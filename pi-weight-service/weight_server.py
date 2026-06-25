@@ -106,20 +106,16 @@ def _loop():
     while True:
         try:
             g, raw = read_grams()
-            if _ema["v"] is None:
+            if abs(g) < DEADZONE:
+                g = 0.0
+            # Hysteresis: only change the shown number on a real change (>=3g),
+            # so a settled reading stays steady instead of flickering.
+            if _ema["v"] is None or abs(g - _ema["v"]) >= 3:
                 _ema["v"] = g
-            else:
-                # Adaptive: a big jump (item placed/removed) -> track fast;
-                # small jitter (noise) -> smooth heavily.
-                alpha = 0.85 if abs(g - _ema["v"]) > 15 else 0.3
-                _ema["v"] = alpha * g + (1 - alpha) * _ema["v"]
-            sm = _ema["v"]
-            if abs(sm) < DEADZONE:
-                sm = 0.0
-            _latest.update(weight_g=round(sm), raw=raw, ok=True, error=None, ts=time.time())
+            _latest.update(weight_g=round(_ema["v"]), raw=raw, ok=True, error=None, ts=time.time())
         except Exception as e:
             _latest.update(ok=False, error=str(e), ts=time.time())
-        time.sleep(0.03)
+        time.sleep(0.05)
 
 threading.Thread(target=_loop, daemon=True).start()
 
