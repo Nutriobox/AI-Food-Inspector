@@ -103,18 +103,23 @@ _latest = {"weight_g": 0.0, "raw": 0, "ok": False, "error": None, "ts": 0}
 _ema = {"v": None}
 
 def _loop():
-    alpha = 0.35  # smoothing factor (lower = smoother/slower)
     while True:
         try:
             g, raw = read_grams()
-            _ema["v"] = g if _ema["v"] is None else (alpha * g + (1 - alpha) * _ema["v"])
+            if _ema["v"] is None:
+                _ema["v"] = g
+            else:
+                # Adaptive: a big jump (item placed/removed) -> track fast;
+                # small jitter (noise) -> smooth heavily.
+                alpha = 0.85 if abs(g - _ema["v"]) > 15 else 0.3
+                _ema["v"] = alpha * g + (1 - alpha) * _ema["v"]
             sm = _ema["v"]
             if abs(sm) < DEADZONE:
                 sm = 0.0
             _latest.update(weight_g=round(sm), raw=raw, ok=True, error=None, ts=time.time())
         except Exception as e:
             _latest.update(ok=False, error=str(e), ts=time.time())
-        time.sleep(0.2)
+        time.sleep(0.1)
 
 threading.Thread(target=_loop, daemon=True).start()
 
