@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Camera, Info } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { hasCapture, getCapture, CAPTURES_CHANGED_EVENT } from "@/lib/captures";
@@ -112,10 +112,31 @@ function ElapsedTimer({ placedAt }: { placedAt: string }) {
 
 export default function KdsPage() {
   const [tab, setTab] = useState<Tab>("live");
+  const scrollRef = useRef<HTMLDivElement>(null);
   // KDS is a live, time-based view — render only on the client to avoid
   // server/client hydration mismatches on timers and order times.
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
+
+  // Finger/mouse drag-to-scroll over the order cards (reliable on the kiosk touchscreen).
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    let down = false, startY = 0, startTop = 0;
+    const onDown = (e: PointerEvent) => { down = true; startY = e.clientY; startTop = el.scrollTop; };
+    const onMove = (e: PointerEvent) => { if (down) el.scrollTop = startTop - (e.clientY - startY); };
+    const onUp = () => { down = false; };
+    el.addEventListener("pointerdown", onDown);
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    return () => {
+      el.removeEventListener("pointerdown", onDown);
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+  }, [mounted]);
 
   // Bump on capture changes / window focus so card photo-status re-reads.
   const [capV, setCapV] = useState(0);
@@ -176,7 +197,7 @@ export default function KdsPage() {
   }
 
   return (
-    <div className="w-screen mx-[calc(50%-50vw)] px-4 grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-4 lg:h-[calc(100vh-7rem)] select-none [-webkit-user-select:none] [-webkit-touch-callout:none] [touch-action:pan-y]">
+    <div className="w-screen mx-[calc(50%-50vw)] px-4 grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-4 lg:h-[calc(100vh-7rem)] select-none [-webkit-user-select:none] [-webkit-touch-callout:none] [touch-action:none]">
       {/* Sidebar: Live/Past tabs + Item Summary */}
       <aside className="rounded-card bg-white shadow-card p-3 flex flex-col lg:h-full overflow-hidden">
         <div className="flex gap-1.5">
@@ -196,7 +217,7 @@ export default function KdsPage() {
 
         <div className="mt-4 pt-3 border-t border-line flex flex-col flex-1 min-h-0">
           <div className="px-1 mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted">Item Summary</div>
-          <ul className="space-y-0.5 flex-1 overflow-y-auto pr-1 [touch-action:pan-y] [-webkit-overflow-scrolling:touch] overscroll-contain">
+          <ul className="space-y-0.5 flex-1 overflow-y-auto pr-1 [touch-action:none] [-webkit-overflow-scrolling:touch] overscroll-contain">
             {itemSummary.map(([name, qty]) => (
               <li key={name} className="flex items-center justify-between gap-2 text-[13px] px-1 py-1 rounded-md hover:bg-canvas">
                 <span className="truncate text-ink">{name}</span>
@@ -211,7 +232,7 @@ export default function KdsPage() {
       </aside>
 
       {/* Main: order cards */}
-      <section className="lg:h-full overflow-y-auto [touch-action:pan-y] [-webkit-overflow-scrolling:touch] overscroll-contain">
+      <section ref={scrollRef} className="lg:h-full overflow-y-auto [touch-action:none] [-webkit-overflow-scrolling:touch] overscroll-contain cursor-grab active:cursor-grabbing">
         {isLoading && orders.length === 0 ? (
           <div className="rounded-card bg-white shadow-card p-8 text-center text-muted text-sm">Loading orders…</div>
         ) : (
@@ -257,7 +278,7 @@ function OrderCard({ order, past, v }: { order: LiveOrder; past: boolean; v: num
       </div>
 
       {/* Items */}
-      <ul className="divide-y divide-line flex-1 min-h-0 overflow-y-auto [touch-action:pan-y] [-webkit-overflow-scrolling:touch] overscroll-contain">
+      <ul className="divide-y divide-line flex-1 min-h-0 overflow-y-auto [touch-action:none] [-webkit-overflow-scrolling:touch] overscroll-contain">
         {mains.map((it) => {
           const captured = hasCapture(order.id, it.id);
           return (
