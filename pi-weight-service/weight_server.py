@@ -72,7 +72,7 @@ def _read_raw_once():
         count -= 0x1000000
     return count
 
-def read_raw(samples=7):
+def read_raw(samples=20):
     vals = []
     with _lock:
         for _ in range(samples):
@@ -80,27 +80,41 @@ def read_raw(samples=7):
                 vals.append(_read_raw_once())
             except TimeoutError:
                 break
-            time.sleep(0.005)
+            time.sleep(0.002)
     if not vals:
         raise TimeoutError("no HX711 samples")
     vals.sort()
-    return vals[len(vals) // 2]  # median
+    # trimmed mean: drop the lowest/highest 25% then average the middle (stable)
+    k = max(0, len(vals) // 4)
+    mid = vals[k: len(vals) - k] or vals
+    return sum(mid) / len(mid)
+
+# Zero-zone: readings within +/- this many grams of zero report exactly 0.
+DEADZONE = float(os.environ.get("WEIGHT_DEADZONE", "5"))
 
 def read_grams():
     raw = read_raw()
-    return round((raw - _cal["offset"]) / _cal["scale"], 1), raw
+    g = (raw - _cal["offset"]) / _cal["scale"]
+    return g, raw
 
 # ---- Background loop keeps the latest reading fresh ----
 _latest = {"weight_g": 0.0, "raw": 0, "ok": False, "error": None, "ts": 0}
 
+_ema = {"v": None}
+
 def _loop():
+    alpha = 0.35  # smoothing factor (lower = smoother/slower)
     while True:
         try:
             g, raw = read_grams()
-            _latest.update(weight_g=g, raw=raw, ok=True, error=None, ts=time.time())
+            _ema["v"] = g if _ema["v"] is None else (alpha * g + (1 - alpha) * _ema["v"])
+            sm = _ema["v"]
+            if abs(sm) < DEADZONE:
+                sm = 0.0
+            _latest.update(weight_g=round(sm), raw=raw, ok=True, error=None, ts=time.time())
         except Exception as e:
             _latest.update(ok=False, error=str(e), ts=time.time())
-        time.sleep(0.25)
+        time.sleep(0.2)
 
 threading.Thread(target=_loop, daemon=True).start()
 
