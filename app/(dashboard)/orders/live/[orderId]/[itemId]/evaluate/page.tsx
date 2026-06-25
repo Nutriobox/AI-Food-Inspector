@@ -129,7 +129,7 @@ export default function EvaluatePage() {
       // Weight service not reachable -> show 0 (never a fake number).
       if (active) setWeight(0);
     };
-    const id = setInterval(tick, 500);
+    const id = setInterval(tick, 150);
     tick();
     return () => { active = false; clearInterval(id); };
   }, []);

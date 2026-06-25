@@ -93,7 +93,7 @@ def read_raw(samples=20):
 DEADZONE = float(os.environ.get("WEIGHT_DEADZONE", "5"))
 
 def read_grams():
-    raw = read_raw()
+    raw = read_raw(3)   # few samples = fast live response
     g = (raw - _cal["offset"]) / _cal["scale"]
     return g, raw
 
@@ -119,7 +119,7 @@ def _loop():
             _latest.update(weight_g=round(sm), raw=raw, ok=True, error=None, ts=time.time())
         except Exception as e:
             _latest.update(ok=False, error=str(e), ts=time.time())
-        time.sleep(0.1)
+        time.sleep(0.03)
 
 threading.Thread(target=_loop, daemon=True).start()
 
