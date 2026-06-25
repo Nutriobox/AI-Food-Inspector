@@ -298,4 +298,17 @@ function OrderCard({ order, past, v }: { order: LiveOrder; past: boolean; v: num
                 title={captured ? "View / recapture photo" : "Capture photo"}
                 className={cn(
                   "shrink-0 inline-flex h-10 w-10 items-center justify-center rounded-lg border-2 active:scale-95 transition-transform hover:bg-white",
-                  captured ? "border-brand-600 text-brand-60
+                  captured ? "border-brand-600 text-brand-600" : "border-line text-muted hover:text-ink"
+                )}
+              >
+                {captured ? <Info className="h-5 w-5" /> : <Camera className="h-5 w-5" />}
+              </Link>
+            </div>
+          </li>
+          );
+        })}
+        {order.items.length === 0 && <li className="px-3 py-3 text-xs text-muted">No items.</li>}
+      </ul>
+    </article>
+  );
+}

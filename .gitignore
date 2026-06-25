@@ -12,3 +12,8 @@ next-env.d.ts
 data/*.db
 data/*.db-shm
 data/*.db-wal
+
+# Pi weight service local files
+__pycache__/
+pi-weight-service/hx711_pins.json
+pi-weight-service/weight_cal.json

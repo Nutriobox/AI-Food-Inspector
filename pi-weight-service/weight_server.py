@@ -149,4 +149,13 @@ class Handler(BaseHTTPRequestHandler):
             raw = float(read_raw())
             _cal["scale"] = (raw - _cal["offset"]) / grams
             _save_cal()
-            self._json({"ok": True, "scale": _cal["scale"], "offset"
+            self._json({"ok": True, "scale": _cal["scale"], "offset": _cal["offset"]})
+        else:
+            self._json({"error": "not found"}, 404)
+
+    def log_message(self, *a):  # quiet
+        pass
+
+if __name__ == "__main__":
+    print(f"Weight service on http://127.0.0.1:{HTTP_PORT}  (DT=GPIO{DT_PIN}, SCK=GPIO{SCK_PIN})")
+    ThreadingHTTPServer(("127.0.0.1", HTTP_PORT), Handler).serve_forever()
