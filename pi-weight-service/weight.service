@@ -4,15 +4,14 @@ After=network.target
 
 [Service]
 Type=simple
-# Adjust the path/user to where you copy this folder on the Pi:
-WorkingDirectory=/home/pi/pi-weight-service
-ExecStart=/usr/bin/python3 /home/pi/pi-weight-service/weight_server.py
-Environment=HX711_DT=5
-Environment=HX711_SCK=6
+# Path + user for the Nutriobox CM4 machine (admin user).
+WorkingDirectory=/home/admin/pi-weight-service
+ExecStart=/usr/bin/python3 /home/admin/pi-weight-service/weight_server.py
+# No HX711_DT/SCK here on purpose -> it uses the auto-detected pins in hx711_pins.json
 Environment=WEIGHT_PORT=8765
 Restart=always
 RestartSec=2
-User=pi
+User=admin
 
 [Install]
 WantedBy=multi-user.target
