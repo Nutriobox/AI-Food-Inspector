@@ -39,8 +39,10 @@ export function SiteHeader() {
   useEffect(() => {
     const supabase = createClient();
     supabase.auth.getUser().then(({ data }) => {
+      const meta = (data.user?.user_metadata as any) || {};
       setEmail(data.user?.email ?? "");
-      setOutlet(((data.user?.user_metadata as any)?.outlet as string) ?? "");
+      setOutlet((meta.outlet as string) ?? "");
+      if (meta.role === "outlet") setKiosk(true); // outlet accounts are KDS-only
     });
   }, []);
 

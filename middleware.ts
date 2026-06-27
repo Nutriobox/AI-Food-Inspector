@@ -33,24 +33,41 @@ export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
   const isPublic = PUBLIC_PREFIXES.some((p) => path === p || path.startsWith(p + "/") || path.startsWith(p));
 
-  // Not logged in + private page -> send to login
+  // Outlet accounts are restricted to the KDS only; everyone else is "admin".
+  const isOutlet = ((user?.user_metadata as any)?.role) === "outlet";
+  const home = isOutlet ? "/orders/live" : "/overview";
+
+  // Not logged in + private page -> login
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
   }
 
-  // Logged in + on the login page -> send into the app
+  // Logged in + on the login page -> their home
   if (user && path === "/login") {
     const url = request.nextUrl.clone();
-    url.pathname = "/overview";
+    url.pathname = home;
     return NextResponse.redirect(url);
+  }
+
+  // Outlet accounts may ONLY use the KDS (and the APIs it needs). Anything else -> KDS.
+  if (user && isOutlet) {
+    const allowed =
+      path === "/orders/live" ||
+      path.startsWith("/orders/live/") ||
+      path.startsWith("/api/") ||
+      path === "/login";
+    if (!allowed) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/orders/live";
+      return NextResponse.redirect(url);
+    }
   }
 
   return response;
 }
 
 export const config = {
-  // Run on everything except Next internals and static asset files.
   matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|svg|ico|webp|ai)$).*)"],
 };
