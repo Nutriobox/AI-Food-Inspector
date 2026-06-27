@@ -15,9 +15,9 @@ export async function GET(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   const meta = (user?.user_metadata as any) || {};
   if (meta.role === "outlet") {
-    const ppId = String(meta.pp_id ?? "");
-    const row = ppId
-      ? await one<{ name: string }>("SELECT name FROM restaurants WHERE pp_rest_id = ? LIMIT 1", [ppId])
+    const restId = String(meta.rest_id ?? "");
+    const row = restId
+      ? await one<{ name: string }>("SELECT name FROM restaurants WHERE pp_rest_id = ? LIMIT 1", [restId])
       : undefined;
     restaurant = row?.name ?? "__no_outlet_match__";
   }
