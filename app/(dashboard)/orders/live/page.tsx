@@ -160,7 +160,7 @@ export default function KdsPage() {
   const sample = useMemo(() => buildSampleOrders(), []);
   const liveData = data?.orders ?? [];
   // Until the live feed / reseed is wired, fall back to the sample orders.
-  const base = liveData.length === 0 ? sample : liveData;
+  const base = liveData; // show only real (outlet-filtered) orders, no demo fallback
 
   // An order is "complete" once every item has a captured photo.
   const isComplete = (o: LiveOrder) => o.items.length > 0 && o.items.every((it) => hasCapture(o.id, it.id));
