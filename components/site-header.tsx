@@ -29,6 +29,7 @@ export function SiteHeader() {
   const [open, setOpen] = useState(false);
   const [kiosk, setKiosk] = useState(false);
   const [email, setEmail] = useState<string>("");
+  const [outlet, setOutlet] = useState<string>("");
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -37,7 +38,10 @@ export function SiteHeader() {
 
   useEffect(() => {
     const supabase = createClient();
-    supabase.auth.getUser().then(({ data }) => setEmail(data.user?.email ?? ""));
+    supabase.auth.getUser().then(({ data }) => {
+      setEmail(data.user?.email ?? "");
+      setOutlet(((data.user?.user_metadata as any)?.outlet as string) ?? "");
+    });
   }, []);
 
   useEffect(() => {
@@ -64,8 +68,8 @@ export function SiteHeader() {
           <div className="flex items-center gap-2">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/logo-onwhite.png" alt="Nutriobox" className="h-6 w-auto" />
-            <span className="hidden md:inline text-muted">&middot;</span>
-            <span className="hidden md:inline text-sm text-muted">Kitchen Display</span>
+            <span className="text-muted">&middot;</span>
+            <span className="text-sm font-semibold text-ink">{outlet || "Kitchen Display"}</span>
           </div>
           <span className="text-xs text-muted">KDS mode</span>
         </div>
