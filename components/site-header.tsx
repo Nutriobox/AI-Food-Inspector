@@ -71,7 +71,15 @@ export function SiteHeader() {
             <span className="text-muted">&middot;</span>
             <span className="text-sm font-semibold text-ink">{outlet || "Kitchen Display"}</span>
           </div>
-          <span className="text-xs text-muted">KDS mode</span>
+          <div className="relative" ref={ref}>
+            <button onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }} className="text-xs text-muted hover:text-ink px-2 py-1 rounded-md hover:bg-line/60 focus-ring">KDS mode</button>
+            {open && (
+              <div className="absolute right-0 mt-2 w-48 rounded-card bg-white shadow-card p-1 text-sm z-50">
+                {email && <div className="px-3 py-2 text-xs text-muted truncate">{email}</div>}
+                <button onClick={signOut} className="flex w-full items-center gap-2 px-3 py-2 rounded-md hover:bg-canvas text-danger-600"><LogOut className="h-4 w-4" />Sign out</button>
+              </div>
+            )}
+          </div>
         </div>
       </header>
     );
