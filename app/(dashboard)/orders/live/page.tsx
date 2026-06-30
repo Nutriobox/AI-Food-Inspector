@@ -163,7 +163,7 @@ export default function KdsPage() {
   const base = liveData; // show only real (outlet-filtered) orders, no demo fallback
 
   // An order is "complete" once every item has a captured photo.
-  const isComplete = (o: LiveOrder) => o.items.length > 0 && o.items.every((it) => hasCapture(o.id, it.id));
+  const isComplete = (o: LiveOrder) => o.items.length > 0 && o.items.every((it) => it.evaluated || hasCapture(o.id, it.id));
   // Completion time = the latest photo captured for the order.
   const completionTime = (o: LiveOrder) =>
     Math.max(0, ...o.items.map((it) => {
@@ -280,7 +280,7 @@ function OrderCard({ order, past, v }: { order: LiveOrder; past: boolean; v: num
       {/* Items */}
       <ul className="divide-y divide-line flex-1 min-h-0 overflow-y-auto [touch-action:none] [-webkit-overflow-scrolling:touch] overscroll-contain">
         {mains.map((it) => {
-          const captured = hasCapture(order.id, it.id);
+          const captured = it.evaluated || hasCapture(order.id, it.id);
           return (
           <li key={it.id} className="px-3 py-2">
             <div className="flex items-center justify-between gap-2">
@@ -305,7 +305,7 @@ function OrderCard({ order, past, v }: { order: LiveOrder; past: boolean; v: num
           );
         })}
         {addons.map((it) => {
-          const captured = hasCapture(order.id, it.id);
+          const captured = it.evaluated || hasCapture(order.id, it.id);
           return (
           <li key={it.id} className="px-3 py-1.5 bg-canvas/50">
             <div className="flex items-center justify-between gap-2">

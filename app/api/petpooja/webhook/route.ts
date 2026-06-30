@@ -107,6 +107,17 @@ export async function POST(req: NextRequest) {
       if (dish) {
         await run(`INSERT INTO order_items (order_id, dish_id, quantity) VALUES (?, ?, ?)`, [orderId, dish.id, qty]);
       }
+
+      // Add-ons are nested inside each Petpooja item -> store each as an add-on line.
+      const addons = Array.isArray(it?.addon) ? it.addon : [];
+      for (const ad of addons) {
+        const adName = String(ad?.name ?? "").trim();
+        if (!adName) continue;
+        const adQty = Number(ad?.quantity) > 0 ? Math.floor(Number(ad.quantity)) : 1;
+        let adDish = await one<{ id: number }>(`SELECT id FROM dishes WHERE lower(name) = lower(?) AND category IN ('Add-Ons','Extras') LIMIT 1`, [adName]);
+        if (!adDish) adDish = await one<{ id: number }>(`INSERT INTO dishes (name, category) VALUES (?, 'Add-Ons') RETURNING id`, [adName]);
+        if (adDish) await run(`INSERT INTO order_items (order_id, dish_id, quantity) VALUES (?, ?, ?)`, [orderId, adDish.id, adQty]);
+      }
     }
 
     if (eventId) await run(`UPDATE petpooja_events SET mapped_order_id=?, note=? WHERE id=?`, [orderId, outletNote, eventId]);
