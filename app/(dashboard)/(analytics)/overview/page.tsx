@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { AlertTriangle, BarChart3, CheckCircle2, ClipboardList } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/components/page-header";
@@ -28,8 +29,8 @@ export default function OverviewPage() {
     <>
       <PageHeader title="Overview" subtitle="Food quality evaluation and analytics platform" actions={<RefreshButton />} />
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
-        <StatCard label="Total Orders"     value={isLoading ? "-" : k.total}     caption="In selected date range" Icon={ClipboardList} />
-        <StatCard label="Orders Evaluated" value={isLoading ? "-" : k.evaluated} caption="Orders with evaluations" Icon={CheckCircle2} tone="success" />
+        <Link href="/orders" className="block focus-ring rounded-card transition hover:shadow-card-lg hover:-translate-y-0.5"><StatCard label="Total Orders" value={isLoading ? "-" : k.total} caption="In selected date range — view orders" Icon={ClipboardList} /></Link>
+        <Link href="/evaluations" className="block focus-ring rounded-card transition hover:shadow-card-lg hover:-translate-y-0.5"><StatCard label="Orders Evaluated" value={isLoading ? "-" : k.evaluated} caption="Click to view evaluated orders" Icon={CheckCircle2} tone="success" /></Link>
         <StatCard label="Not Evaluated"    value={isLoading ? "-" : k.missing}   caption="Missing evaluations"     Icon={AlertTriangle} tone="danger" />
         <StatCard label="Evaluation Rate"  value={isLoading ? "-" : `${k.rate}%`} caption="Coverage rate"          Icon={BarChart3} tone={k.rate < 30 ? "danger" : "success"} />
       </div>
