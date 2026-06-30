@@ -153,9 +153,17 @@ export default function KdsPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["kds", "live"],
     queryFn: () => api<{ orders: LiveOrder[] }>(`/api/kds?mode=live`),
-    refetchInterval: 5000,
+    refetchInterval: 4000,
+    refetchIntervalInBackground: true, // keep polling even if the kiosk tab is backgrounded
     retry: false,
   });
+
+  // Kiosk safety net: full page reload every 30 min so the screen never freezes / goes stale.
+  // (Only runs while on the live KDS view, so it never interrupts a capture.)
+  useEffect(() => {
+    const id = setInterval(() => window.location.reload(), 30 * 60 * 1000);
+    return () => clearInterval(id);
+  }, []);
   // Stable sample data (timers tick off these placed_at values).
   const sample = useMemo(() => buildSampleOrders(), []);
   const liveData = data?.orders ?? [];
