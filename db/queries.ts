@@ -252,16 +252,25 @@ const ADDON_CATEGORIES = new Set(["Add-Ons", "Extras"]);
 
 async function buildOrders(rows: any[]): Promise<LiveOrder[]> {
   const now = Date.now();
+  if (rows.length === 0) return [];
+  const ids = rows.map((o) => o.id);
+  const ph = ids.map(() => "?").join(",");
+  const allItems = await q<any>(
+    `SELECT oi.order_id, oi.id, oi.dish_id, d.name AS dish, d.category, oi.quantity, d.reference_image,
+            EXISTS(SELECT 1 FROM evaluations e WHERE e.order_item_id = oi.id) AS evaluated
+     FROM order_items oi
+     JOIN dishes d ON d.id = oi.dish_id
+     WHERE oi.order_id IN (${ph})`,
+    ids
+  );
+  const byOrder = new Map<number, any[]>();
+  for (const it of allItems) {
+    const arr = byOrder.get(it.order_id) ?? [];
+    arr.push(it); byOrder.set(it.order_id, arr);
+  }
   const out: LiveOrder[] = [];
   for (const o of rows) {
-    const items = await q<any>(
-      `SELECT oi.id, oi.dish_id, d.name AS dish, d.category, oi.quantity, d.reference_image,
-              EXISTS(SELECT 1 FROM evaluations e WHERE e.order_item_id = oi.id) AS evaluated
-       FROM order_items oi
-       JOIN dishes d ON d.id = oi.dish_id
-       WHERE oi.order_id = ?`,
-      [o.id]
-    );
+    const items = byOrder.get(o.id) ?? [];
     out.push({
       id: o.id,
       code: o.code,

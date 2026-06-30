@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Camera, Info } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { hasCapture, getCapture, CAPTURES_CHANGED_EVENT } from "@/lib/captures";
@@ -96,13 +96,25 @@ function buildSampleOrders(): LiveOrder[] {
   }));
 }
 
+// One shared 1-second clock for ALL timers (instead of one interval per order card).
+let _clockNow = Date.now();
+const _clockSubs = new Set<() => void>();
+let _clockTimer: ReturnType<typeof setInterval> | null = null;
+function _subscribeClock(cb: () => void) {
+  _clockSubs.add(cb);
+  if (!_clockTimer) _clockTimer = setInterval(() => { _clockNow = Date.now(); _clockSubs.forEach((f) => f()); }, 1000);
+  return () => {
+    _clockSubs.delete(cb);
+    if (_clockSubs.size === 0 && _clockTimer) { clearInterval(_clockTimer); _clockTimer = null; }
+  };
+}
+function useSharedNow() {
+  return useSyncExternalStore(_subscribeClock, () => _clockNow, () => _clockNow);
+}
+
 // Live elapsed timer (HH:MM:SS) since the order was placed.
 function ElapsedTimer({ placedAt }: { placedAt: string }) {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, []);
+  const now = useSharedNow();
   const secs = Math.max(0, Math.floor((now - new Date(placedAt).getTime()) / 1000));
   const hh = String(Math.floor(secs / 3600)).padStart(2, "0");
   const mm = String(Math.floor((secs % 3600) / 60)).padStart(2, "0");
@@ -258,7 +270,7 @@ export default function KdsPage() {
   );
 }
 
-function OrderCard({ order, past, v }: { order: LiveOrder; past: boolean; v: number }) {
+const OrderCard = memo(function OrderCard({ order, past, v }: { order: LiveOrder; past: boolean; v: number }) {
   void v; // re-render trigger when captures change
   const mains = order.items.filter((i) => !i.isAddon);
   const addons = order.items.filter((i) => i.isAddon);
@@ -340,4 +352,4 @@ function OrderCard({ order, past, v }: { order: LiveOrder; past: boolean; v: num
       </ul>
     </article>
   );
-}
+});
