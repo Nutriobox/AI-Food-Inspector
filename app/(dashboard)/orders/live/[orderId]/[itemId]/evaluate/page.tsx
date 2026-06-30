@@ -18,6 +18,7 @@ type ItemDetail = {
   expected_grams: number; reference_image: string | null;
   monitored_tags: IssueTag[]; category: string; ai_criteria: string | null;
   order_code: string; restaurant: string;
+  eval_image?: string | null; eval_score?: number | null; eval_status?: "Pass" | "Warn" | "Fail" | null; eval_notes?: string | null;
 };
 
 type CriterionResult = { criterion: string; pass: boolean; reason: string };
@@ -135,8 +136,18 @@ export default function EvaluatePage() {
   }, []);
 
   useEffect(() => {
-    setCaptured(getCapture(orderId, itemId)?.dataUrl ?? null);
-  }, [orderId, itemId]);
+    const local = getCapture(orderId, itemId)?.dataUrl ?? null;
+    if (local) { setCaptured(local); return; }
+    // No local photo (e.g. viewing a past order on another device) -> load the saved one from the DB.
+    if (item?.eval_image) {
+      setCaptured(item.eval_image);
+      setAiResult({
+        overallScore: item.eval_score ?? undefined,
+        verdict: (item.eval_status as "Pass" | "Warn" | "Fail" | undefined) ?? undefined,
+        summary: item.eval_notes ?? undefined,
+      });
+    }
+  }, [orderId, itemId, item]);
 
   const DISH_IMAGES = dishImages as Record<string, string>;
   const dishName = item?.dish ?? dishParam ?? "";

@@ -7,6 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { hasCapture, getCapture, CAPTURES_CHANGED_EVENT } from "@/lib/captures";
 import { cn } from "@/lib/utils";
+import { createClient } from "@/lib/supabase/client";
 
 type LiveItem = {
   id: number; dish_id: number; dish: string; category: string;
@@ -124,11 +125,17 @@ function ElapsedTimer({ placedAt }: { placedAt: string }) {
 
 export default function KdsPage() {
   const [tab, setTab] = useState<Tab>("live");
+  const [outlet, setOutlet] = useState("All Restaurants");
+  const [isAdmin, setIsAdmin] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   // KDS is a live, time-based view — render only on the client to avoid
   // server/client hydration mismatches on timers and order times.
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
+
+  useEffect(() => {
+    createClient().auth.getUser().then(({ data }) => setIsAdmin(((data.user?.user_metadata as any)?.role) !== "outlet"));
+  }, []);
 
   // Finger/mouse drag-to-scroll over the order cards (reliable on the kiosk touchscreen).
   useEffect(() => {
@@ -162,9 +169,15 @@ export default function KdsPage() {
     };
   }, []);
 
+  const { data: restData } = useQuery({
+    queryKey: ["restaurants", "list"],
+    queryFn: () => api<{ rows: any[] }>("/api/restaurants?mode=list"),
+    enabled: isAdmin,
+  });
+
   const { data, isLoading } = useQuery({
-    queryKey: ["kds", "live"],
-    queryFn: () => api<{ orders: LiveOrder[] }>(`/api/kds?mode=live`),
+    queryKey: ["kds", "live", outlet],
+    queryFn: () => api<{ orders: LiveOrder[] }>(`/api/kds?mode=live${outlet !== "All Restaurants" ? `&restaurant=${encodeURIComponent(outlet)}` : ""}`),
     refetchInterval: 4000,
     refetchIntervalInBackground: true, // keep polling even if the kiosk tab is backgrounded
     retry: false,
@@ -220,6 +233,13 @@ export default function KdsPage() {
     <div className="w-screen mx-[calc(50%-50vw)] px-4 grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-4 lg:h-[calc(100vh-7rem)] select-none [-webkit-user-select:none] [-webkit-touch-callout:none] [touch-action:none]">
       {/* Sidebar: Live/Past tabs + Item Summary */}
       <aside className="rounded-card bg-white shadow-card p-3 flex flex-col lg:h-full overflow-hidden">
+        {isAdmin && (
+          <select value={outlet} onChange={(e) => setOutlet(e.target.value)}
+            className="mb-2 w-full rounded-btn border border-line text-sm bg-white px-2 py-1.5 focus-ring">
+            <option value="All Restaurants">All outlets</option>
+            {(restData?.rows ?? []).map((r: any) => (<option key={r.id} value={r.name}>{r.name}</option>))}
+          </select>
+        )}
         <div className="flex gap-1.5">
           {(["live", "past"] as Tab[]).map((t) => (
             <button
