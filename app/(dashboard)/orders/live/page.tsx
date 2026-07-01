@@ -11,7 +11,7 @@ import { createClient } from "@/lib/supabase/client";
 
 type LiveItem = {
   id: number; dish_id: number; dish: string; category: string;
-  quantity: number; reference_image: string | null; evaluated: boolean; isAddon: boolean;
+  quantity: number; reference_image: string | null; evaluated: boolean; isAddon: boolean; noCapture: boolean;
 };
 type LiveOrder = {
   id: number; code: string; restaurant: string; table: string;
@@ -104,6 +104,7 @@ function buildSampleOrders(): LiveOrder[] {
       reference_image: null,
       evaluated: false,
       isAddon: !!it.isAddon,
+      noCapture: false,
     })),
   }));
 }
@@ -216,7 +217,9 @@ export default function KdsPage() {
     // it also moves once every item is evaluated/captured.
     const ageMin = (Date.now() - new Date(o.placed_at).getTime()) / 60000;
     if (ageMin >= 15) return true;
-    return o.items.length > 0 && o.items.every((it) => it.evaluated || hasCapture(o.id, it.id));
+    // Free add-ons (noCapture) have no photo step -> they don't block completion.
+    const evaluatable = o.items.filter((it) => !it.noCapture);
+    return evaluatable.length > 0 && evaluatable.every((it) => it.evaluated || hasCapture(o.id, it.id));
   };
   // Completion time = the latest photo captured for the order.
   const completionTime = (o: LiveOrder) =>
@@ -382,19 +385,21 @@ const OrderCard = memo(function OrderCard({ order, past, v }: { order: LiveOrder
             <div className="flex items-center justify-between gap-2">
               <span className="text-[12px] truncate flex items-center gap-1.5 min-w-0">
                 <span className="shrink-0 text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">Add on</span>
-                <span className={cn("truncate", captured ? "text-brand-600" : "text-danger-500")}>{it.dish}{it.quantity > 1 && <span className="ml-1 text-[11px]">x {it.quantity}</span>}</span>
+                <span className={cn("truncate", it.noCapture ? "text-ink" : captured ? "text-brand-600" : "text-danger-500")}>{it.dish}{it.quantity > 1 && <span className="ml-1 text-[11px]">x {it.quantity}</span>}</span>
               </span>
-              <Link
-                href={`/orders/live/${order.id}/${it.id}/evaluate?dish=${encodeURIComponent(it.dish)}`}
-                aria-label={captured ? `View photo of ${it.dish}` : `Capture ${it.dish}`}
-                title={captured ? "View / recapture photo" : "Capture photo"}
-                className={cn(
-                  "shrink-0 inline-flex h-10 w-10 items-center justify-center rounded-lg border-2 active:scale-95 transition-transform hover:bg-white",
-                  captured ? "border-brand-600 text-brand-600" : "border-line text-muted hover:text-ink"
-                )}
-              >
-                {captured ? <Info className="h-5 w-5" /> : <Camera className="h-5 w-5" />}
-              </Link>
+              {!it.noCapture && (
+                <Link
+                  href={`/orders/live/${order.id}/${it.id}/evaluate?dish=${encodeURIComponent(it.dish)}`}
+                  aria-label={captured ? `View photo of ${it.dish}` : `Capture ${it.dish}`}
+                  title={captured ? "View / recapture photo" : "Capture photo"}
+                  className={cn(
+                    "shrink-0 inline-flex h-10 w-10 items-center justify-center rounded-lg border-2 active:scale-95 transition-transform hover:bg-white",
+                    captured ? "border-brand-600 text-brand-600" : "border-line text-muted hover:text-ink"
+                  )}
+                >
+                  {captured ? <Info className="h-5 w-5" /> : <Camera className="h-5 w-5" />}
+                </Link>
+              )}
             </div>
           </li>
           );

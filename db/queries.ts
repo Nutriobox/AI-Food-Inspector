@@ -249,7 +249,7 @@ export type LiveOrder = {
   ext_id: string | null;
   notes: string | null;
   order_type: string | null;
-  items: { id: number; dish_id: number; dish: string; category: string; quantity: number; reference_image: string | null; evaluated: boolean; isAddon: boolean }[];
+  items: { id: number; dish_id: number; dish: string; category: string; quantity: number; reference_image: string | null; evaluated: boolean; isAddon: boolean; noCapture: boolean }[];
 };
 
 const ADDON_CATEGORIES = new Set(["Add-Ons", "Extras"]);
@@ -260,7 +260,7 @@ async function buildOrders(rows: any[]): Promise<LiveOrder[]> {
   const ids = rows.map((o) => o.id);
   const ph = ids.map(() => "?").join(",");
   const allItems = await q<any>(
-    `SELECT oi.order_id, oi.id, oi.dish_id, d.name AS dish, d.category, oi.quantity, d.reference_image,
+    `SELECT oi.order_id, oi.id, oi.dish_id, d.name AS dish, d.category, oi.quantity, d.reference_image, oi.no_capture,
             EXISTS(SELECT 1 FROM evaluations e WHERE e.order_item_id = oi.id) AS evaluated
      FROM order_items oi
      JOIN dishes d ON d.id = oi.dish_id
@@ -298,6 +298,7 @@ async function buildOrders(rows: any[]): Promise<LiveOrder[]> {
         reference_image: i.reference_image,
         evaluated: !!i.evaluated,
         isAddon: ADDON_CATEGORIES.has(i.category),
+        noCapture: !!i.no_capture,
       })),
     });
   }

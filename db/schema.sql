@@ -73,6 +73,9 @@ CREATE TABLE IF NOT EXISTS evaluation_tags (
   PRIMARY KEY (evaluation_id, tag_code)
 );
 
+-- Free add-ons (Petpooja price 0) are shown on the KDS without a camera/photo step.
+ALTER TABLE order_items ADD COLUMN IF NOT EXISTS no_capture BOOLEAN NOT NULL DEFAULT false;
+
 CREATE INDEX IF NOT EXISTS idx_orders_placed_at ON orders(placed_at);
 CREATE INDEX IF NOT EXISTS idx_orders_status    ON orders(status);
 CREATE INDEX IF NOT EXISTS idx_orders_restaurant ON orders(restaurant_id);
