@@ -15,7 +15,9 @@ type LiveItem = {
 };
 type LiveOrder = {
   id: number; code: string; restaurant: string; table: string;
-  customer: string; channel: string; placed_at: string; minutes: number; status: string; items: LiveItem[];
+  customer: string; channel: string; placed_at: string; minutes: number; status: string;
+  kot: string | null; ext_id: string | null; notes: string | null;
+  items: LiveItem[];
 };
 
 type Tab = "live" | "past";
@@ -302,7 +304,7 @@ const OrderCard = memo(function OrderCard({ order, past, v }: { order: LiveOrder
       {/* Yellow header */}
       <header className="bg-amber-400 text-amber-950 px-3 py-2 flex items-center justify-between gap-2 shrink-0">
         <div className="flex items-baseline gap-2 min-w-0">
-          <span className="font-bold text-sm num">{orderNumber(order.code)}</span>
+          <span className="font-bold text-sm num">{order.kot ? `KOT ${order.kot}` : orderNumber(order.code)}</span>
           <span className="text-[12px] text-amber-900/80 truncate">{order.customer}</span>
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -310,6 +312,12 @@ const OrderCard = memo(function OrderCard({ order, past, v }: { order: LiveOrder
           <span className={cn("text-[10px] font-semibold px-1.5 py-0.5 rounded-md", channelCls)}>{order.channel}</span>
         </div>
       </header>
+
+      {order.ext_id && (order.channel === "Swiggy" || order.channel === "Zomato") && (
+        <div className="px-3 pt-1.5 text-[11px] text-muted truncate shrink-0">
+          {order.channel} <span className="num">{order.ext_id.slice(0, -4)}<span className="font-bold text-ink">{order.ext_id.slice(-4)}</span></span>
+        </div>
+      )}
 
       {/* Timer + placed time */}
       <div className="px-3 pt-2 pb-1 text-[11px] text-muted flex items-center justify-between shrink-0">
@@ -370,6 +378,12 @@ const OrderCard = memo(function OrderCard({ order, past, v }: { order: LiveOrder
         })}
         {order.items.length === 0 && <li className="px-3 py-3 text-xs text-muted">No items.</li>}
       </ul>
+
+      {order.notes && order.notes.replace(/<[^>]*>/g, " ").trim() && (
+        <div className="px-3 py-1.5 border-t border-line bg-amber-50 text-[11px] text-amber-900 shrink-0 line-clamp-2">
+          <span className="font-semibold">Note:</span> {order.notes.replace(/<br\s*\/?>(?=)/gi, " ").replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim()}
+        </div>
+      )}
     </article>
   );
 });

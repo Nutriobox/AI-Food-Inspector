@@ -245,6 +245,9 @@ export type LiveOrder = {
   placed_at: string;
   minutes: number;
   status: string;
+  kot: string | null;
+  ext_id: string | null;
+  notes: string | null;
   items: { id: number; dish_id: number; dish: string; category: string; quantity: number; reference_image: string | null; evaluated: boolean; isAddon: boolean }[];
 };
 
@@ -281,6 +284,9 @@ async function buildOrders(rows: any[]): Promise<LiveOrder[]> {
       placed_at: o.placed_at,
       minutes: Math.max(0, Math.floor((now - new Date(o.placed_at).getTime()) / 60000)),
       status: o.status,
+      kot: o.kot ?? null,
+      ext_id: o.ext_id ?? null,
+      notes: o.notes ?? null,
       items: items.map((i) => ({
         id: i.id,
         dish_id: i.dish_id,
@@ -304,7 +310,7 @@ export async function getLiveOrders(restaurant?: string): Promise<LiveOrder[]> {
     params.push(restaurant);
   }
   const orders = await q<any>(
-    `SELECT o.id, o.code, o.placed_at, o.status, o.table_no, o.customer, o.channel, r.name AS restaurant
+    `SELECT o.id, o.code, o.placed_at, o.status, o.table_no, o.customer, o.channel, o.kot, o.ext_id, o.notes, r.name AS restaurant
      FROM orders o
      JOIN restaurants r ON r.id = o.restaurant_id
      WHERE ${where.join(" AND ")}
@@ -323,7 +329,7 @@ export async function getPastOrders(restaurant?: string): Promise<LiveOrder[]> {
     params.push(restaurant);
   }
   const orders = await q<any>(
-    `SELECT o.id, o.code, o.placed_at, o.status, o.table_no, o.customer, o.channel, r.name AS restaurant
+    `SELECT o.id, o.code, o.placed_at, o.status, o.table_no, o.customer, o.channel, o.kot, o.ext_id, o.notes, r.name AS restaurant
      FROM orders o
      JOIN restaurants r ON r.id = o.restaurant_id
      WHERE ${where.join(" AND ")}
