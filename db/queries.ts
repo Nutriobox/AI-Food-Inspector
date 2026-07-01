@@ -302,9 +302,24 @@ async function buildOrders(rows: any[]): Promise<LiveOrder[]> {
   return out;
 }
 
+// Start of the current "business day" = the most recent 1:00 AM IST.
+// Returned as a "YYYY-MM-DD HH:MM:SS" string to compare against placed_at (also IST).
+function businessDayStartIST(): string {
+  const ist = new Date(Date.now() + 5.5 * 3600 * 1000);
+  let y = ist.getUTCFullYear(), mo = ist.getUTCMonth(), d = ist.getUTCDate();
+  if (ist.getUTCHours() < 1) {
+    const prev = new Date(Date.UTC(y, mo, d) - 86400000);
+    y = prev.getUTCFullYear(); mo = prev.getUTCMonth(); d = prev.getUTCDate();
+  }
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${y}-${pad(mo + 1)}-${pad(d)} 01:00:00`;
+}
+
+// KDS feed: ALL of today's orders (since 1 AM). The Live/Past split (15-min rule)
+// is done on the client. Orders before today's 1 AM naturally drop off at 1 AM.
 export async function getLiveOrders(restaurant?: string): Promise<LiveOrder[]> {
-  const where: string[] = ["o.status != 'served'"];
-  const params: any[] = [];
+  const where: string[] = ["o.placed_at >= ?"];
+  const params: any[] = [businessDayStartIST()];
   if (restaurant && restaurant !== "All Restaurants") {
     where.push("r.name = ?");
     params.push(restaurant);
@@ -315,7 +330,7 @@ export async function getLiveOrders(restaurant?: string): Promise<LiveOrder[]> {
      JOIN restaurants r ON r.id = o.restaurant_id
      WHERE ${where.join(" AND ")}
      ORDER BY o.placed_at DESC
-     LIMIT 30`,
+     LIMIT 500`,
     params
   );
   return buildOrders(orders);

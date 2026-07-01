@@ -135,6 +135,10 @@ export default function KdsPage() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
+  // Re-check the 15-minute Live->Past rule periodically (even when no new orders arrive).
+  const [, setTick] = useState(0);
+  useEffect(() => { const id = setInterval(() => setTick((t) => t + 1), 15000); return () => clearInterval(id); }, []);
+
   useEffect(() => {
     createClient().auth.getUser().then(({ data }) => setIsAdmin(((data.user?.user_metadata as any)?.role) !== "outlet"));
   }, []);
@@ -198,7 +202,13 @@ export default function KdsPage() {
   const base = liveData; // show only real (outlet-filtered) orders, no demo fallback
 
   // An order is "complete" once every item has a captured photo.
-  const isComplete = (o: LiveOrder) => o.items.length > 0 && o.items.every((it) => it.evaluated || hasCapture(o.id, it.id));
+  const isComplete = (o: LiveOrder) => {
+    // After 15 minutes an order auto-moves to Past (photo taken or not);
+    // it also moves once every item is evaluated/captured.
+    const ageMin = (Date.now() - new Date(o.placed_at).getTime()) / 60000;
+    if (ageMin >= 15) return true;
+    return o.items.length > 0 && o.items.every((it) => it.evaluated || hasCapture(o.id, it.id));
+  };
   // Completion time = the latest photo captured for the order.
   const completionTime = (o: LiveOrder) =>
     Math.max(0, ...o.items.map((it) => {
@@ -208,7 +218,7 @@ export default function KdsPage() {
 
   // Live = not-yet-complete orders; Past = complete orders, most recently completed first.
   const liveOrders = base.filter((o) => !isComplete(o));
-  const pastOrders = base.filter(isComplete).sort((a, b) => completionTime(b) - completionTime(a));
+  const pastOrders = base.filter(isComplete).sort((a, b) => (a.placed_at < b.placed_at ? 1 : -1));
   const orders = tab === "live" ? liveOrders : pastOrders;
   // reference capV so live/past partition recomputes when captures change
   void capV;
