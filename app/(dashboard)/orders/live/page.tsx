@@ -393,7 +393,7 @@ const OrderCard = memo(function OrderCard({ order, past, v }: { order: LiveOrder
                   aria-label={captured ? `View photo of ${it.dish}` : `Capture ${it.dish}`}
                   title={captured ? "View / recapture photo" : "Capture photo"}
                   className={cn(
-                    "shrink-0 inline-flex h-10 w-10 items-center justify-center rounded-lg border-2 active:scale-95 transition-transform hover:bg-white",
+                    "shrink-0 inline-flex h-11 w-11 items-center justify-center rounded-lg border-2 active:scale-95 transition-transform hover:bg-white",
                     captured ? "border-brand-600 text-brand-600" : "border-line text-muted hover:text-ink"
                   )}
                 >
