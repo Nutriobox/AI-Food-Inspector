@@ -72,14 +72,15 @@ export async function POST(req: NextRequest) {
 
     // Idempotent insert: if Petpooja resends the same order, don't duplicate.
     const inserted = await one<{ id: number }>(
-      `INSERT INTO orders (code, restaurant_id, table_no, customer, channel, placed_at, status, kot, ext_id, notes)
-       VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)
+      `INSERT INTO orders (code, restaurant_id, table_no, customer, channel, placed_at, status, kot, ext_id, notes, order_type)
+       VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)
        ON CONFLICT (code) DO NOTHING
        RETURNING id`,
       [code, restaurantId, order?.table_no ? String(order.table_no) : null, customer, channel, placedAt,
        order?.token_no != null && order?.token_no !== "" ? String(order.token_no) : null,
        order?.order_from_id ? String(order.order_from_id) : null,
-       order?.comment ? String(order.comment) : null]
+       order?.comment ? String(order.comment) : null,
+       order?.order_type ? String(order.order_type) : null]
     );
 
     if (!inserted) {

@@ -16,7 +16,7 @@ type LiveItem = {
 type LiveOrder = {
   id: number; code: string; restaurant: string; table: string;
   customer: string; channel: string; placed_at: string; minutes: number; status: string;
-  kot: string | null; ext_id: string | null; notes: string | null;
+  kot: string | null; ext_id: string | null; notes: string | null; order_type: string | null;
   items: LiveItem[];
 };
 
@@ -26,6 +26,14 @@ const CHANNEL_STYLES: Record<string, string> = {
   Swiggy: "text-orange-700 bg-orange-100",
   Zomato: "text-rose-700 bg-rose-100",
   POS: "text-slate-700 bg-slate-200",
+};
+
+// POS orders show their order type (Dine In / Pick Up) instead of "POS".
+const TYPE_STYLES: Record<string, string> = {
+  "Dine In": "text-emerald-700 bg-emerald-100",
+  "Pick Up": "text-violet-700 bg-violet-100",
+  "Pickup": "text-violet-700 bg-violet-100",
+  "Delivery": "text-slate-700 bg-slate-200",
 };
 
 function orderNumber(code: string) {
@@ -86,6 +94,7 @@ function buildSampleOrders(): LiveOrder[] {
     placed_at: new Date(base - o.elapsed * 1000).toISOString(),
     minutes: Math.floor(o.elapsed / 60),
     status: "pending",
+    kot: null, ext_id: null, notes: null, order_type: null,
     items: o.items.map((it) => ({
       id: itemId++,
       dish_id: 0,
@@ -306,7 +315,11 @@ const OrderCard = memo(function OrderCard({ order, past, v }: { order: LiveOrder
   void v; // re-render trigger when captures change
   const mains = order.items.filter((i) => !i.isAddon);
   const addons = order.items.filter((i) => i.isAddon);
-  const channelCls = CHANNEL_STYLES[order.channel] ?? CHANNEL_STYLES.POS;
+  const badgeLabel = order.channel === "POS" ? (order.order_type || "Dine In") : order.channel;
+  const badgeCls = order.channel === "POS"
+    ? (TYPE_STYLES[order.order_type ?? ""] ?? CHANNEL_STYLES.POS)
+    : (CHANNEL_STYLES[order.channel] ?? CHANNEL_STYLES.POS);
+  const note = (order.notes ?? "").replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]*>/g, "").replace(/[ \t]+/g, " ").trim();
   const placedTime = new Date(order.placed_at).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true });
 
   return (
@@ -319,7 +332,7 @@ const OrderCard = memo(function OrderCard({ order, past, v }: { order: LiveOrder
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <span className="text-[11px] num">{mains.length} {mains.length === 1 ? "item" : "items"}</span>
-          <span className={cn("text-[10px] font-semibold px-1.5 py-0.5 rounded-md", channelCls)}>{order.channel}</span>
+          <span className={cn("text-[10px] font-semibold px-1.5 py-0.5 rounded-md", badgeCls)}>{badgeLabel}</span>
         </div>
       </header>
 
@@ -389,9 +402,9 @@ const OrderCard = memo(function OrderCard({ order, past, v }: { order: LiveOrder
         {order.items.length === 0 && <li className="px-3 py-3 text-xs text-muted">No items.</li>}
       </ul>
 
-      {order.notes && order.notes.replace(/<[^>]*>/g, " ").trim() && (
-        <div className="px-3 py-1.5 border-t border-line bg-amber-50 text-[11px] text-amber-900 shrink-0 line-clamp-2">
-          <span className="font-semibold">Note:</span> {order.notes.replace(/<br\s*\/?>(?=)/gi, " ").replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim()}
+      {note && (
+        <div className="px-3 py-1.5 border-t border-line bg-amber-50 text-[11px] text-amber-900 shrink-0 whitespace-pre-line line-clamp-2">
+          <span className="font-semibold">Note:</span> {note}
         </div>
       )}
     </article>
