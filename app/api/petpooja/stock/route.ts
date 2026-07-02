@@ -3,6 +3,8 @@ import { one, run } from "@/db/client";
 
 export const dynamic = "force-dynamic";
 
+const PETPOOJA_IPS_DEFAULT = "18.140.101.169,13.215.101.248,13.229.16.157,18.140.106.48,13.234.181.90,35.154.180.221";
+
 // Petpooja "Update Item/addon In-Stock / Out-of-Stock" calls this endpoint to toggle an
 // item's or add-on's availability. We store it as dishes.pp_active, which drives the
 // green "Live" indicator on the Menu Library.
@@ -44,11 +46,10 @@ export async function POST(req: NextRequest) {
   //   token (our own testing) OR whitelisted IP OR a known outlet restID.
   const expected = process.env.PETPOOJA_TOKEN || "";
   const tokenOk = !!expected && (body?.token === expected || req.nextUrl.searchParams.get("token") === expected);
-  const allowIps = (process.env.PETPOOJA_MENU_IPS || "").split(",").map((s) => s.trim()).filter(Boolean);
-  const srcIp = (req.headers.get("x-forwarded-for") || "").split(",")[0].trim();
-  const ipOk = allowIps.length > 0 && allowIps.includes(srcIp);
-  const knownOutlet = restId ? await one<{ id: number }>(`SELECT id FROM restaurants WHERE pp_rest_id = ? LIMIT 1`, [restId]) : null;
-  if (!tokenOk && !ipOk && !knownOutlet) {
+  const allowIps = (((process.env.PETPOOJA_MENU_IPS || "") + "," + PETPOOJA_IPS_DEFAULT)).split(",").map((s) => s.trim()).filter(Boolean);
+  const srcIp = (req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || "").split(",")[0].trim();
+  const ipOk = !!srcIp && allowIps.includes(srcIp);
+  if (!tokenOk && !ipOk) {
     return NextResponse.json({ code: 400, status: "failed", message: "unauthorized" }, { status: 401 });
   }
 

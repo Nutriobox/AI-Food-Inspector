@@ -3,8 +3,10 @@ import { one, run } from "@/db/client";
 
 export const dynamic = "force-dynamic";
 
-// Opening this URL in a browser is a GET -> friendly "alive" message.
-// Petpooja's "Push Menu" API POSTs the full menu here after every menu change.
+// Petpooja's published source IPs for menu/stock pushes (they can't send our token).
+// Extra IPs can be added via the PETPOOJA_MENU_IPS env var.
+const PETPOOJA_IPS_DEFAULT = "18.140.101.169,13.215.101.248,13.229.16.157,18.140.106.48,13.234.181.90,35.154.180.221";
+
 export async function GET() {
   return NextResponse.json({
     ok: true,
@@ -15,7 +17,7 @@ export async function GET() {
 
 // Petpooja availability flags: true / "1" = live; false / "0" / "2" = not live.
 function isActive(v: any): boolean {
-  if (v == null) return true; // absent -> assume live
+  if (v == null) return true;
   if (typeof v === "boolean") return v;
   const s = String(v).trim().toLowerCase();
   return !(s === "false" || s === "0" || s === "2" || s === "out" || s === "outofstock");
@@ -23,12 +25,9 @@ function isActive(v: any): boolean {
 
 type AddonRow = { id: string; name: string; price: number; group: string; inStock: boolean };
 
-// Add-on items live in `addongroupitems` (addonitemid / addonitem_name / addonitem_price /
-// addongroup_id). Some accounts nest the items inside each `addongroups[]` entry instead.
 function pickAddonItems(body: any): AddonRow[] {
   const root = body?.properties ?? body ?? {};
   const out: AddonRow[] = [];
-
   const pushItem = (it: any, group: string) => {
     const id = String(it?.addonitemid ?? it?.addongroupitemid ?? it?.addon_id ?? it?.id ?? "").trim();
     if (!id) return;
@@ -37,7 +36,6 @@ function pickAddonItems(body: any): AddonRow[] {
     const inStock = isActive(it?.in_stock ?? it?.active ?? it?.status);
     out.push({ id, name, price, group, inStock });
   };
-
   const groupName: Record<string, string> = {};
   const groups: any[] = Array.isArray(root?.addongroups) ? root.addongroups : [];
   for (const g of groups) {
@@ -56,7 +54,6 @@ function pickAddonItems(body: any): AddonRow[] {
   return out;
 }
 
-// Regular menu items -> { id, active } (for dishes.pp_active).
 function pickItems(body: any): { id: string; active: boolean }[] {
   const root = body?.properties ?? body ?? {};
   const items: any[] = Array.isArray(root?.items) ? root.items : [];
@@ -87,19 +84,22 @@ export async function POST(req: NextRequest) {
   const addons = pickAddonItems(body);
   const items = pickItems(body);
 
-  // Auth (Push Menu can't send our token): token, OR whitelisted IP, OR a menu for a known outlet.
+  // Auth: our token (testing) OR the request came from a whitelisted Petpooja IP.
   const expected = process.env.PETPOOJA_TOKEN || "";
   const tokenOk = !!expected && (body?.token === expected || req.nextUrl.searchParams.get("token") === expected);
-  const allowIps = (process.env.PETPOOJA_MENU_IPS || "").split(",").map((s) => s.trim()).filter(Boolean);
-  const srcIp = (req.headers.get("x-forwarded-for") || "").split(",")[0].trim();
-  const ipOk = allowIps.length > 0 && allowIps.includes(srcIp);
-  const knownOutlet = restId ? await one<{ id: number }>(`SELECT id FROM restaurants WHERE pp_rest_id = ? LIMIT 1`, [restId]) : null;
-  const bootstrapOk = !!knownOutlet && (addons.length > 0 || items.length > 0);
-  if (!tokenOk && !ipOk && !bootstrapOk) {
+  const allowIps = ((process.env.PETPOOJA_MENU_IPS || "") + "," + PETPOOJA_IPS_DEFAULT).split(",").map((s) => s.trim()).filter(Boolean);
+  const srcIp = (req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || "").split(",")[0].trim();
+  const ipOk = !!srcIp && allowIps.includes(srcIp);
+
+  if (!tokenOk && !ipOk) {
+    try { await run(`INSERT INTO pp_menu_events (rest_id, note, raw) VALUES (?, ?, ?)`, [restId, `REJECTED 401 ip=${srcIp}`, JSON.stringify(body)]); } catch {}
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 
-  // 1) Store add-on prices + availability.
+  // Log the accepted menu push (so we can confirm Petpooja's exact format).
+  try { await run(`INSERT INTO pp_menu_events (rest_id, note, raw) VALUES (?, ?, ?)`, [restId, `ok ip=${srcIp} addons:${addons.length} items:${items.length}`, JSON.stringify(body)]); } catch {}
+
+  // 1) Add-on prices + availability.
   let stored = 0;
   for (const a of addons) {
     try {
