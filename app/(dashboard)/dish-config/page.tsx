@@ -36,11 +36,11 @@ function isImageUrl(v: string | null): v is string {
 // "Live" = active in Petpooja. A green box with a glowing green pulse and glowing text.
 // "Not live" = a plain grey box. (No dots.)
 function LiveBadge({ on, compact = false }: { on: boolean; compact?: boolean }) {
-  const size = compact ? "text-[9px] px-2 py-[3px]" : "text-[10px] px-2.5 py-[3px]";
+  const size = compact ? "text-[9px] px-1.5 py-0.5" : "text-[10px] px-2 py-0.5";
   if (!on) {
     return (
       <span
-        className={cn("inline-flex items-center justify-center font-bold uppercase tracking-widest rounded-full border", size)}
+        className={cn("inline-flex items-center justify-center font-semibold rounded-full border", size)}
         style={{ background: "#ffffff", color: "#94a3b8", borderColor: "#e2e8f0" }}
       >
         Not live
@@ -49,8 +49,8 @@ function LiveBadge({ on, compact = false }: { on: boolean; compact?: boolean }) 
   }
   return (
     <span
-      className={cn("nb-live inline-flex items-center justify-center font-bold uppercase tracking-widest rounded-full border", size)}
-      style={{ background: "#ffffff", color: "#0f172a", borderColor: "#22c55e" }}
+      className={cn("inline-flex items-center justify-center font-semibold rounded-full border", size)}
+      style={{ background: "#ffffff", color: "#16a34a", borderColor: "#22c55e", boxShadow: "0 0 6px rgba(34,197,94,0.6)" }}
     >
       Live
     </span>
@@ -108,15 +108,6 @@ export default function MenuLibraryPage() {
 
   return (
     <>
-      {/* Neon pulsing glow for the Live badge */}
-      <style>{`
-        @keyframes nbLiveGlow {
-          0%, 100% { box-shadow: 0 0 3px #22c55e, 0 0 7px rgba(34,197,94,0.55); }
-          50%      { box-shadow: 0 0 6px #22c55e, 0 0 16px rgba(34,197,94,0.95), 0 0 26px rgba(34,197,94,0.45); }
-        }
-        .nb-live { animation: nbLiveGlow 1.5s ease-in-out infinite; }
-      `}</style>
-
       <PageHeader
         title="Menu Library"
         subtitle="Browse by category, then open an item to configure it for KDS & AI Food Inspector"
