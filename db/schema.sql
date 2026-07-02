@@ -129,3 +129,6 @@ ALTER TABLE dishes ADD COLUMN IF NOT EXISTS pp_active BOOLEAN NOT NULL DEFAULT t
 ALTER TABLE dishes ADD COLUMN IF NOT EXISTS pp_active_at TIMESTAMPTZ;
 ALTER TABLE dishes ADD COLUMN IF NOT EXISTS pp_addon_id TEXT;
 ALTER TABLE pp_menu_addons ADD COLUMN IF NOT EXISTS in_stock BOOLEAN NOT NULL DEFAULT true;
+
+-- Second reference image: reference_image = Dine In, reference_image_delivery = Delivery.
+ALTER TABLE dishes ADD COLUMN IF NOT EXISTS reference_image_delivery TEXT;

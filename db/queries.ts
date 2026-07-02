@@ -454,6 +454,7 @@ export async function updateDish(
     expected_grams?: number;
     monitored_tags?: string[];
     reference_image?: string | null;
+    reference_image_delivery?: string | null;
     description?: string | null;
     pp_item_id?: string | null;
     swiggy_item_id?: string | null;
@@ -469,7 +470,7 @@ export async function updateDish(
   if (!cur) return null;
   const pick = <T>(v: T | undefined, fallback: T): T => (v === undefined ? fallback : v);
   await run(
-    `UPDATE dishes SET name = ?, category = ?, expected_grams = ?, reference_image = ?,
+    `UPDATE dishes SET name = ?, category = ?, expected_grams = ?, reference_image = ?, reference_image_delivery = ?,
             description = ?, pp_item_id = ?, swiggy_item_id = ?, zomato_item_id = ?,
             bench_garnish = ?, bench_hygiene = ?, bench_portion = ?, bench_plating = ?,
             ai_criteria = ?, monitored_tags = ?
@@ -479,6 +480,7 @@ export async function updateDish(
       patch.category ?? cur.category,
       patch.expected_grams ?? cur.expected_grams,
       pick(patch.reference_image, cur.reference_image),
+      pick(patch.reference_image_delivery, cur.reference_image_delivery),
       pick(patch.description, cur.description),
       pick(patch.pp_item_id, cur.pp_item_id),
       pick(patch.swiggy_item_id, cur.swiggy_item_id),
