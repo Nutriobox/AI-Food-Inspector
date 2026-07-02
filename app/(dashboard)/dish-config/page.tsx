@@ -41,7 +41,7 @@ function LiveBadge({ on, compact = false }: { on: boolean; compact?: boolean }) 
     return (
       <span
         className={cn("inline-flex items-center justify-center font-bold uppercase tracking-widest rounded-full border", size)}
-        style={{ background: "#0c1424", color: "#64748b", borderColor: "#334155" }}
+        style={{ background: "#ffffff", color: "#94a3b8", borderColor: "#e2e8f0" }}
       >
         Not live
       </span>
@@ -50,12 +50,7 @@ function LiveBadge({ on, compact = false }: { on: boolean; compact?: boolean }) 
   return (
     <span
       className={cn("nb-live inline-flex items-center justify-center font-bold uppercase tracking-widest rounded-full border", size)}
-      style={{
-        background: "#04140b",
-        color: "#86efac",
-        borderColor: "#22c55e",
-        textShadow: "0 0 4px #22c55e, 0 0 9px rgba(34,197,94,0.9)",
-      }}
+      style={{ background: "#ffffff", color: "#0f172a", borderColor: "#22c55e" }}
     >
       Live
     </span>
