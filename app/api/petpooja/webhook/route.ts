@@ -118,8 +118,11 @@ export async function POST(req: NextRequest) {
         const adName = String(ad?.name ?? "").trim();
         if (!adName) continue;
         const adQty = Number(ad?.quantity) > 0 ? Math.floor(Number(ad.quantity)) : 1;
-        // Free add-ons (price 0) are not separately photographed -> no camera on the KDS.
-        const adNoCapture = (Number(ad?.price) || 0) === 0;
+        // Camera logic is driven ONLY by this order's live Petpooja payload (no Excel/lookup).
+        // price > 0  -> paid add-on  -> show camera;  price <= 0 or missing -> free add-on -> no camera.
+        // Read per order, so any future price change in Petpooja is picked up automatically.
+        const adPrice = Number(ad?.price);
+        const adNoCapture = !(adPrice > 0);
         let adDish = await one<{ id: number }>(`SELECT id FROM dishes WHERE lower(name) = lower(?) AND category IN ('Add-Ons','Extras') LIMIT 1`, [adName]);
         if (!adDish) adDish = await one<{ id: number }>(`INSERT INTO dishes (name, category) VALUES (?, 'Add-Ons') RETURNING id`, [adName]);
         if (adDish) await run(`INSERT INTO order_items (order_id, dish_id, quantity, no_capture) VALUES (?, ?, ?, ?)`, [orderId, adDish.id, adQty, adNoCapture]);
