@@ -122,3 +122,10 @@ CREATE TABLE IF NOT EXISTS pp_menu_addons (
   rest_id     TEXT,
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Petpooja live/active status -> drives the green "Live" indicator on the Menu Library.
+-- Set from the menu push (item in_stock/active) and toggled by /api/petpooja/stock.
+ALTER TABLE dishes ADD COLUMN IF NOT EXISTS pp_active BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE dishes ADD COLUMN IF NOT EXISTS pp_active_at TIMESTAMPTZ;
+ALTER TABLE dishes ADD COLUMN IF NOT EXISTS pp_addon_id TEXT;
+ALTER TABLE pp_menu_addons ADD COLUMN IF NOT EXISTS in_stock BOOLEAN NOT NULL DEFAULT true;

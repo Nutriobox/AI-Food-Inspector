@@ -21,6 +21,7 @@ type Dish = {
   swiggy_item_id: string | null;
   zomato_item_id: string | null;
   monitored_tags: string;
+  pp_active: boolean;
   orders: number;
   eval: number;
 };
@@ -32,10 +33,23 @@ function isImageUrl(v: string | null): v is string {
   return !!v && /^https?:\/\//.test(v);
 }
 
+// Glowing green dot when live (active in Petpooja); grey dot when not live.
+function LiveDot({ on }: { on: boolean }) {
+  if (!on) return <span className="inline-block h-2 w-2 rounded-full bg-slate-300 shrink-0" />;
+  return (
+    <span className="relative inline-flex h-2 w-2 shrink-0">
+      <span className="absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75 animate-ping" />
+      <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500" style={{ boxShadow: "0 0 6px 1px rgba(34,197,94,0.85)" }} />
+    </span>
+  );
+}
+
 export default function MenuLibraryPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["dishes-list"],
     queryFn: () => api<{ rows: Dish[] }>("/api/dishes"),
+    refetchInterval: 30000, // keep the Live status fresh from Petpooja
+    refetchIntervalInBackground: true,
   });
   const dishes = data?.rows ?? [];
 
@@ -43,12 +57,21 @@ export default function MenuLibraryPage() {
   const [active, setActive] = useState<DishStatus | null>(null);
   const [category, setCategory] = useState<string>(ALL);
 
-  // Category list for the left panel (alphabetical, with item counts).
+  // Category list (alphabetical) with item counts and a "live" flag (>=1 active item).
   const categories = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const d of dishes) m.set(d.category, (m.get(d.category) ?? 0) + 1);
-    return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([name, n]) => ({ name, n }));
+    const m = new Map<string, { n: number; live: number }>();
+    for (const d of dishes) {
+      const e = m.get(d.category) ?? { n: 0, live: 0 };
+      e.n++;
+      if (d.pp_active) e.live++;
+      m.set(d.category, e);
+    }
+    return [...m.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([name, v]) => ({ name, n: v.n, live: v.live > 0 }));
   }, [dishes]);
+
+  const liveTotal = useMemo(() => dishes.filter((d) => d.pp_active).length, [dishes]);
 
   const counts = useMemo(() => {
     const c: Record<DishStatus, number> = { configured: 0, partial: 0, not_configured: 0 };
@@ -58,7 +81,6 @@ export default function MenuLibraryPage() {
 
   const searching = search.trim().length > 0;
 
-  // Items shown on the right: the selected category (or all), narrowed by search + status.
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
     return dishes
@@ -89,13 +111,17 @@ export default function MenuLibraryPage() {
       <div className="flex flex-col md:flex-row gap-4 md:h-[calc(100vh-13rem)] md:min-h-[460px]">
         {/* Left: category list */}
         <aside className="w-full md:w-64 shrink-0 rounded-card bg-white shadow-card border border-line flex flex-col overflow-hidden max-h-[40vh] md:max-h-none">
-          <div className="px-3 py-2.5 border-b border-line text-[11px] font-semibold text-muted uppercase tracking-wide">
-            Categories
+          <div className="px-3 py-2.5 border-b border-line flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-muted uppercase tracking-wide">Categories</span>
+            <span className="inline-flex items-center gap-1 text-[10px] font-medium text-green-600">
+              <LiveDot on={true} /> live
+            </span>
           </div>
           <div className="flex-1 overflow-y-auto p-1.5">
             <CatButton
               name={ALL}
               n={dishes.length}
+              live={liveTotal > 0}
               active={category === ALL && !searching}
               onClick={() => { setCategory(ALL); setSearch(""); }}
             />
@@ -104,6 +130,7 @@ export default function MenuLibraryPage() {
                 key={c.name}
                 name={c.name}
                 n={c.n}
+                live={c.live}
                 active={!searching && category === c.name}
                 onClick={() => { setCategory(c.name); setSearch(""); }}
               />
@@ -184,6 +211,15 @@ export default function MenuLibraryPage() {
                           </div>
                         </div>
                         <span
+                          className={cn(
+                            "inline-flex items-center gap-1 text-[10px] font-semibold shrink-0 w-14 justify-end",
+                            d.pp_active ? "text-green-600" : "text-muted"
+                          )}
+                          title={d.pp_active ? "Live on Petpooja" : "Not live on Petpooja"}
+                        >
+                          <LiveDot on={d.pp_active} /> {d.pp_active ? "Live" : "Not live"}
+                        </span>
+                        <span
                           className="text-[10px] font-medium px-2 py-0.5 rounded-full shrink-0"
                           style={{ background: m.bg, color: m.fg }}
                         >
@@ -203,17 +239,20 @@ export default function MenuLibraryPage() {
   );
 }
 
-function CatButton({ name, n, active, onClick }: { name: string; n: number; active: boolean; onClick: () => void }) {
+function CatButton({
+  name, n, live, active, onClick,
+}: { name: string; n: number; live: boolean; active: boolean; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
       className={cn(
-        "w-full text-left flex items-center justify-between gap-2 px-3 py-2 rounded-md text-[13px] transition",
+        "w-full text-left flex items-center gap-2 px-3 py-2 rounded-md text-[13px] transition",
         active ? "bg-brand-50 text-brand-700 font-semibold" : "text-ink hover:bg-canvas"
       )}
     >
-      <span className="truncate">{name}</span>
-      <span className={cn("text-[11px] shrink-0 tabular-nums", active ? "text-brand-700" : "text-muted")}>{n}</span>
+      <span className="truncate flex-1">{name}</span>
+      <LiveDot on={live} />
+      <span className={cn("text-[11px] shrink-0 tabular-nums w-6 text-right", active ? "text-brand-700" : "text-muted")}>{n}</span>
     </button>
   );
 }

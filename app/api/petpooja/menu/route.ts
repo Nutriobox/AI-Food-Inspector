@@ -9,15 +9,22 @@ export async function GET() {
   return NextResponse.json({
     ok: true,
     service: "Nutriobox Petpooja menu sync (Push Menu)",
-    message: "Petpooja pushes the menu here (POST). We store each add-on item's real price.",
+    message: "Petpooja pushes the menu here (POST). We store add-on prices and item availability.",
   });
 }
 
-type AddonRow = { id: string; name: string; price: number; group: string };
+// Petpooja availability flags: true / "1" = live; false / "0" / "2" = not live.
+function isActive(v: any): boolean {
+  if (v == null) return true; // absent -> assume live
+  if (typeof v === "boolean") return v;
+  const s = String(v).trim().toLowerCase();
+  return !(s === "false" || s === "0" || s === "2" || s === "out" || s === "outofstock");
+}
 
-// Push Menu format: add-on items live in `addongroupitems` (fields addonitemid /
-// addonitem_name / addonitem_price / addongroup_id). Some accounts nest the items inside
-// each `addongroups[]` entry instead. We handle both, and fall back to older field names.
+type AddonRow = { id: string; name: string; price: number; group: string; inStock: boolean };
+
+// Add-on items live in `addongroupitems` (addonitemid / addonitem_name / addonitem_price /
+// addongroup_id). Some accounts nest the items inside each `addongroups[]` entry instead.
 function pickAddonItems(body: any): AddonRow[] {
   const root = body?.properties ?? body ?? {};
   const out: AddonRow[] = [];
@@ -27,10 +34,10 @@ function pickAddonItems(body: any): AddonRow[] {
     if (!id) return;
     const name = String(it?.addonitem_name ?? it?.addongroupitem_name ?? it?.name ?? "").trim();
     const price = Number(it?.addonitem_price ?? it?.addongroupitem_price ?? it?.price ?? 0) || 0;
-    out.push({ id, name, price, group });
+    const inStock = isActive(it?.in_stock ?? it?.active ?? it?.status);
+    out.push({ id, name, price, group, inStock });
   };
 
-  // Map addongroup id -> name, and collect any items nested inside groups.
   const groupName: Record<string, string> = {};
   const groups: any[] = Array.isArray(root?.addongroups) ? root.addongroups : [];
   for (const g of groups) {
@@ -41,8 +48,6 @@ function pickAddonItems(body: any): AddonRow[] {
       : Array.isArray(g?.addonitems) ? g.addonitems : [];
     for (const it of nested) pushItem(it, gname);
   }
-
-  // Flat top-level addongroupitems array (the documented Push Menu shape).
   const flat: any[] = Array.isArray(root?.addongroupitems) ? root.addongroupitems : [];
   for (const it of flat) {
     const gid = String(it?.addongroup_id ?? it?.addongroupid ?? "");
@@ -51,12 +56,23 @@ function pickAddonItems(body: any): AddonRow[] {
   return out;
 }
 
+// Regular menu items -> { id, active } (for dishes.pp_active).
+function pickItems(body: any): { id: string; active: boolean }[] {
+  const root = body?.properties ?? body ?? {};
+  const items: any[] = Array.isArray(root?.items) ? root.items : [];
+  const out: { id: string; active: boolean }[] = [];
+  for (const it of items) {
+    const id = String(it?.itemid ?? it?.item_id ?? it?.id ?? "").trim();
+    if (!id) continue;
+    out.push({ id, active: isActive(it?.in_stock ?? it?.active ?? it?.status) });
+  }
+  return out;
+}
+
 function restIdFrom(body: any): string {
   const root = body?.properties ?? body ?? {};
   const r = Array.isArray(root?.restaurants) ? root.restaurants[0] : root?.restaurants;
-  return String(
-    root?.restID ?? root?.restaurantid ?? r?.restaurantid ?? r?.res_id ?? r?.restID ?? ""
-  );
+  return String(root?.restID ?? root?.restaurantid ?? r?.restaurantid ?? r?.res_id ?? r?.restID ?? "");
 }
 
 export async function POST(req: NextRequest) {
@@ -69,46 +85,56 @@ export async function POST(req: NextRequest) {
 
   const restId = restIdFrom(body);
   const addons = pickAddonItems(body);
+  const items = pickItems(body);
 
-  // Auth model (Push Menu can't send our token):
-  //   1) our token, if present (used for our own testing);
-  //   2) source IP in the Petpooja allow-list (set PETPOOJA_MENU_IPS once Petpooja shares them);
-  //   3) bootstrap: a well-formed menu whose restID maps to one of our known outlets.
+  // Auth (Push Menu can't send our token): token, OR whitelisted IP, OR a menu for a known outlet.
   const expected = process.env.PETPOOJA_TOKEN || "";
   const tokenOk = !!expected && (body?.token === expected || req.nextUrl.searchParams.get("token") === expected);
   const allowIps = (process.env.PETPOOJA_MENU_IPS || "").split(",").map((s) => s.trim()).filter(Boolean);
   const srcIp = (req.headers.get("x-forwarded-for") || "").split(",")[0].trim();
   const ipOk = allowIps.length > 0 && allowIps.includes(srcIp);
   const knownOutlet = restId ? await one<{ id: number }>(`SELECT id FROM restaurants WHERE pp_rest_id = ? LIMIT 1`, [restId]) : null;
-  const bootstrapOk = !!knownOutlet && addons.length > 0;
-
+  const bootstrapOk = !!knownOutlet && (addons.length > 0 || items.length > 0);
   if (!tokenOk && !ipOk && !bootstrapOk) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 
-  if (addons.length === 0) {
-    return NextResponse.json({ ok: true, note: "no add-on items found in payload", stored: 0 });
-  }
-
+  // 1) Store add-on prices + availability.
   let stored = 0;
   for (const a of addons) {
     try {
       await run(
-        `INSERT INTO pp_menu_addons (addon_id, name, price, group_name, rest_id, updated_at)
-         VALUES (?, ?, ?, ?, ?, now())
+        `INSERT INTO pp_menu_addons (addon_id, name, price, group_name, rest_id, in_stock, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, now())
          ON CONFLICT (addon_id) DO UPDATE
-           SET name = EXCLUDED.name, price = EXCLUDED.price,
-               group_name = EXCLUDED.group_name, rest_id = EXCLUDED.rest_id, updated_at = now()`,
-        [a.id, a.name || null, a.price, a.group || null, restId || null]
+           SET name = EXCLUDED.name, price = EXCLUDED.price, group_name = EXCLUDED.group_name,
+               rest_id = EXCLUDED.rest_id, in_stock = EXCLUDED.in_stock, updated_at = now()`,
+        [a.id, a.name || null, a.price, a.group || null, restId || null, a.inStock]
       );
       stored++;
-    } catch {
-      // keep going; one bad row shouldn't fail the whole sync
-    }
+    } catch { /* keep going */ }
   }
 
-  // Re-sync existing order lines so the camera reflects the real menu price immediately.
-  // (Add-on order_items are matched to the menu by name; we never delete rows, so captured photos stay.)
+  // 2) Item availability -> dishes.pp_active (matched by Petpooja item id).
+  const activeIds = items.filter((i) => i.active).map((i) => i.id);
+  const offIds = items.filter((i) => !i.active).map((i) => i.id);
+  try {
+    if (activeIds.length) await run(`UPDATE dishes SET pp_active = true, pp_active_at = now() WHERE pp_item_id = ANY(?::text[])`, [activeIds]);
+    if (offIds.length) await run(`UPDATE dishes SET pp_active = false, pp_active_at = now() WHERE pp_item_id = ANY(?::text[])`, [offIds]);
+  } catch { /* best-effort */ }
+
+  // 3) Link add-on dishes to their Petpooja addon id + availability (matched by name).
+  try {
+    await run(
+      `UPDATE dishes d
+         SET pp_addon_id = m.addon_id, pp_active = m.in_stock, pp_active_at = now()
+       FROM pp_menu_addons m
+       WHERE d.category IN ('Add-Ons','Extras') AND lower(d.name) = lower(m.name)`,
+      []
+    );
+  } catch { /* best-effort */ }
+
+  // 4) Re-sync the camera flag from real add-on prices (price 0 -> no camera).
   try {
     await run(
       `WITH menu AS (SELECT lower(name) AS nm, MAX(price) AS price FROM pp_menu_addons GROUP BY lower(name))
@@ -117,9 +143,7 @@ export async function POST(req: NextRequest) {
        WHERE t.dish_id = d.id AND d.category IN ('Add-Ons','Extras') AND lower(d.name) = m.nm`,
       []
     );
-  } catch {
-    // re-sync is best-effort; storing the menu already succeeded
-  }
+  } catch { /* best-effort */ }
 
-  return NextResponse.json({ ok: true, restId, stored, addonsSeen: addons.length });
+  return NextResponse.json({ ok: true, restId, addonsStored: stored, itemsSeen: items.length });
 }
