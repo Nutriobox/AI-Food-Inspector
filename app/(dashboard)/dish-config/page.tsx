@@ -36,13 +36,12 @@ function isImageUrl(v: string | null): v is string {
 // "Live" = active in Petpooja. A green box with a glowing green pulse and glowing text.
 // "Not live" = a plain grey box. (No dots.)
 function LiveBadge({ on, compact = false }: { on: boolean; compact?: boolean }) {
+  const size = compact ? "text-[9px] px-2 py-[3px]" : "text-[10px] px-2.5 py-[3px]";
   if (!on) {
     return (
       <span
-        className={cn(
-          "inline-flex items-center justify-center font-semibold uppercase tracking-wide rounded-md border border-line bg-canvas text-muted",
-          compact ? "text-[9px] px-1.5 py-0.5" : "text-[10px] px-2 py-0.5"
-        )}
+        className={cn("inline-flex items-center justify-center font-bold uppercase tracking-widest rounded-full border", size)}
+        style={{ background: "#0c1424", color: "#64748b", borderColor: "#334155" }}
       >
         Not live
       </span>
@@ -50,11 +49,13 @@ function LiveBadge({ on, compact = false }: { on: boolean; compact?: boolean }) 
   }
   return (
     <span
-      className={cn(
-        "nb-live inline-flex items-center justify-center font-bold uppercase tracking-wide rounded-md border border-green-500 bg-green-50 text-green-600",
-        compact ? "text-[9px] px-1.5 py-0.5" : "text-[10px] px-2 py-0.5"
-      )}
-      style={{ textShadow: "0 0 6px rgba(34,197,94,0.75)" }}
+      className={cn("nb-live inline-flex items-center justify-center font-bold uppercase tracking-widest rounded-full border", size)}
+      style={{
+        background: "#04140b",
+        color: "#86efac",
+        borderColor: "#22c55e",
+        textShadow: "0 0 4px #22c55e, 0 0 9px rgba(34,197,94,0.9)",
+      }}
     >
       Live
     </span>
@@ -112,13 +113,13 @@ export default function MenuLibraryPage() {
 
   return (
     <>
-      {/* Pulsing green glow for the Live badge */}
+      {/* Neon pulsing glow for the Live badge */}
       <style>{`
         @keyframes nbLiveGlow {
-          0%, 100% { box-shadow: 0 0 3px 0 rgba(34,197,94,0.45); }
-          50%      { box-shadow: 0 0 10px 2px rgba(34,197,94,0.9); }
+          0%, 100% { box-shadow: 0 0 3px #22c55e, 0 0 7px rgba(34,197,94,0.55); }
+          50%      { box-shadow: 0 0 6px #22c55e, 0 0 16px rgba(34,197,94,0.95), 0 0 26px rgba(34,197,94,0.45); }
         }
-        .nb-live { animation: nbLiveGlow 1.6s ease-in-out infinite; }
+        .nb-live { animation: nbLiveGlow 1.5s ease-in-out infinite; }
       `}</style>
 
       <PageHeader
