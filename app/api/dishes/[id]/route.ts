@@ -10,6 +10,7 @@ const PatchSchema = z.object({
   expected_grams: z.number().int().positive().optional(),
   monitored_tags: z.array(z.string()).optional(),
   reference_image: z.string().nullable().optional(),
+  reference_image_delivery: z.string().nullable().optional(),
   description: z.string().nullable().optional(),
   pp_item_id: z.string().nullable().optional(),
   swiggy_item_id: z.string().nullable().optional(),
