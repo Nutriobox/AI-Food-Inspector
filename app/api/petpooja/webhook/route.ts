@@ -84,9 +84,29 @@ export async function POST(req: NextRequest) {
     );
 
     if (!inserted) {
-      // Already received earlier -> acknowledge so Petpooja stops retrying.
-      if (eventId) await run(`UPDATE petpooja_events SET note=? WHERE id=?`, ["duplicate (already received)", eventId]);
-      return NextResponse.json({ ok: true, duplicate: true, code });
+      // Petpooja re-sent this order (e.g. the order was edited). We don't duplicate it, but we
+      // RE-SYNC each add-on's camera flag from the CURRENT payload price -- so if a price changed
+      // on the edited order, the camera shows/hides accordingly. We only update the no_capture
+      // flag; we never delete items, so any photos already captured are preserved.
+      const existing = await one<{ id: number }>(`SELECT id FROM orders WHERE code = ? LIMIT 1`, [code]);
+      if (existing) {
+        for (const it of items) {
+          const addons = Array.isArray(it?.addon) ? it.addon : [];
+          for (const ad of addons) {
+            const adName = String(ad?.name ?? "").trim();
+            if (!adName) continue;
+            const adNoCapture = !(Number(ad?.price) > 0); // price > 0 -> camera; else no camera
+            await run(
+              `UPDATE order_items SET no_capture = ?
+                 WHERE order_id = ?
+                   AND dish_id IN (SELECT id FROM dishes WHERE lower(name) = lower(?) AND category IN ('Add-Ons','Extras'))`,
+              [adNoCapture, existing.id, adName]
+            );
+          }
+        }
+      }
+      if (eventId) await run(`UPDATE petpooja_events SET note=? WHERE id=?`, ["duplicate re-synced (add-on camera flags updated from price)", eventId]);
+      return NextResponse.json({ ok: true, duplicate: true, resynced: true, code });
     }
     const orderId = inserted.id;
 
