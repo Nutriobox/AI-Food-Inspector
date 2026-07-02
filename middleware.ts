@@ -56,6 +56,8 @@ export async function middleware(request: NextRequest) {
     const allowed =
       path === "/orders/live" ||
       path.startsWith("/orders/live/") ||
+      path === "/dish-config" ||
+      path.startsWith("/dish-config/") || // item configuration is done on the machine (camera + scale)
       path.startsWith("/api/") ||
       path === "/login";
     if (!allowed) {
