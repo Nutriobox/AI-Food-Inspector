@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { one, run } from "@/db/client";
+import { run } from "@/db/client";
 
 export const dynamic = "force-dynamic";
 
