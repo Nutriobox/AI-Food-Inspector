@@ -95,7 +95,9 @@ export async function POST(req: NextRequest) {
           for (const ad of addons) {
             const adName = String(ad?.name ?? "").trim();
             if (!adName) continue;
-            const adNoCapture = !(Number(ad?.price) > 0); // price > 0 -> camera; else no camera
+            const adGroup = String(ad?.group_name ?? "");
+            const adIsCondiment = /(sauce|dip|dressing|\bbase\b|flavou?r)/i.test(adGroup);
+            const adNoCapture = adIsCondiment && !(Number(ad?.price) > 0); // camera for food; hide sauces/bases/flavours
             await run(
               `UPDATE order_items SET no_capture = ?
                  WHERE order_id = ?
@@ -138,11 +140,14 @@ export async function POST(req: NextRequest) {
         const adName = String(ad?.name ?? "").trim();
         if (!adName) continue;
         const adQty = Number(ad?.quantity) > 0 ? Math.floor(Number(ad.quantity)) : 1;
-        // Camera logic is driven ONLY by this order's live Petpooja payload (no Excel/lookup).
-        // price > 0  -> paid add-on  -> show camera;  price <= 0 or missing -> free add-on -> no camera.
-        // Read per order, so any future price change in Petpooja is picked up automatically.
-        const adPrice = Number(ad?.price);
-        const adNoCapture = !(adPrice > 0);
+        // Camera logic is driven by this order's live Petpooja payload (API-driven, no Excel/lookup).
+        // Show a camera for real FOOD (paid extras OR combo food components like breads, proteins, carbs).
+        // Hide it ONLY for sauces / dips / dressings / drink bases / flavour choices. A priced add-on
+        // (price > 0) always shows a camera. We use the add-on GROUP, because Petpooja sends price=0
+        // even for real combo food (e.g. "Choice of Carb" -> Whole Wheat Laccha Parantha).
+        const adGroup = String(ad?.group_name ?? "");
+        const adIsCondiment = /(sauce|dip|dressing|\bbase\b|flavou?r)/i.test(adGroup);
+        const adNoCapture = adIsCondiment && !(Number(ad?.price) > 0);
         let adDish = await one<{ id: number }>(`SELECT id FROM dishes WHERE lower(name) = lower(?) AND category IN ('Add-Ons','Extras') LIMIT 1`, [adName]);
         if (!adDish) adDish = await one<{ id: number }>(`INSERT INTO dishes (name, category) VALUES (?, 'Add-Ons') RETURNING id`, [adName]);
         if (adDish) await run(`INSERT INTO order_items (order_id, dish_id, quantity, no_capture) VALUES (?, ?, ?, ?)`, [orderId, adDish.id, adQty, adNoCapture]);
