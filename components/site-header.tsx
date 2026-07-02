@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { BarChart3, ChevronDown, Monitor, Settings, Sparkles, User, Users, HelpCircle, LogOut } from "lucide-react";
+import { BarChart3, BookOpen, ChevronDown, Monitor, Settings, Sparkles, User, Users, HelpCircle, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { syncKioskFromUrl } from "@/lib/kiosk";
 import { createClient } from "@/lib/supabase/client";
@@ -11,6 +11,7 @@ import { createClient } from "@/lib/supabase/client";
 const NAV = [
   { label: "Analytics", href: "/overview", icon: BarChart3, section: "analytics" },
   { label: "Menu Library", href: "/dish-config", icon: Settings, section: "config" },
+  { label: "Petpooja Menu", href: "/petpooja-menu", icon: BookOpen, section: "ppmenu" },
   { label: "KDS", href: "/orders/live", icon: Monitor, section: "kds" },
   { label: "AI Test", href: "/ai-test", icon: Sparkles, section: "aitest" },
 ] as const;
@@ -18,6 +19,7 @@ const NAV = [
 function sectionFor(path: string) {
   if (path === "/dish-config") return "config";
   if (path.startsWith("/orders/live")) return "kds";
+  if (path.startsWith("/petpooja-menu")) return "ppmenu";
   if (path.startsWith("/ai-test")) return "aitest";
   return "analytics";
 }
