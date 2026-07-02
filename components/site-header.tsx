@@ -10,7 +10,7 @@ import { createClient } from "@/lib/supabase/client";
 
 const NAV = [
   { label: "Analytics", href: "/overview", icon: BarChart3, section: "analytics" },
-  { label: "Configuration", href: "/dish-config", icon: Settings, section: "config" },
+  { label: "Menu Library", href: "/dish-config", icon: Settings, section: "config" },
   { label: "KDS", href: "/orders/live", icon: Monitor, section: "kds" },
   { label: "AI Test", href: "/ai-test", icon: Sparkles, section: "aitest" },
 ] as const;

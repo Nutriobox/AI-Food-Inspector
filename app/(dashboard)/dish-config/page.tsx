@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ImageIcon, Plus, Search } from "lucide-react";
+import { ImageIcon, Plus, Search, ChevronRight } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -26,12 +26,13 @@ type Dish = {
 };
 
 const ORDER: DishStatus[] = ["configured", "partial", "not_configured"];
+const ALL = "All items";
 
 function isImageUrl(v: string | null): v is string {
   return !!v && /^https?:\/\//.test(v);
 }
 
-export default function DishConfigPage() {
+export default function MenuLibraryPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["dishes-list"],
     queryFn: () => api<{ rows: Dish[] }>("/api/dishes"),
@@ -40,6 +41,14 @@ export default function DishConfigPage() {
 
   const [search, setSearch] = useState("");
   const [active, setActive] = useState<DishStatus | null>(null);
+  const [category, setCategory] = useState<string>(ALL);
+
+  // Category list for the left panel (alphabetical, with item counts).
+  const categories = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const d of dishes) m.set(d.category, (m.get(d.category) ?? 0) + 1);
+    return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([name, n]) => ({ name, n }));
+  }, [dishes]);
 
   const counts = useMemo(() => {
     const c: Record<DishStatus, number> = { configured: 0, partial: 0, not_configured: 0 };
@@ -47,20 +56,26 @@ export default function DishConfigPage() {
     return c;
   }, [dishes]);
 
+  const searching = search.trim().length > 0;
+
+  // Items shown on the right: the selected category (or all), narrowed by search + status.
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return dishes.filter((d) => {
-      if (active && dishStatus(d) !== active) return false;
-      if (q && !(`${d.name} ${d.category}`.toLowerCase().includes(q))) return false;
-      return true;
-    });
-  }, [dishes, search, active]);
+    return dishes
+      .filter((d) => {
+        if (active && dishStatus(d) !== active) return false;
+        if (!searching && category !== ALL && d.category !== category) return false;
+        if (q && !(`${d.name} ${d.category}`.toLowerCase().includes(q))) return false;
+        return true;
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [dishes, search, active, category, searching]);
 
   return (
     <>
       <PageHeader
-        title="Configuration"
-        subtitle="Dishes, evaluation criteria, and tag setup"
+        title="Menu Library"
+        subtitle="Browse by category, then open an item to configure it for KDS & AI Food Inspector"
         actions={
           <button
             onClick={() => toast.info("New-dish form coming soon")}
@@ -71,83 +86,134 @@ export default function DishConfigPage() {
         }
       />
 
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-        <div className="relative flex-1 min-w-[220px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted" />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            type="search"
-            placeholder="Search any item..."
-            className="w-full text-sm rounded-btn border border-line bg-white pl-9 pr-3 py-2 focus-ring"
-          />
-        </div>
-        <div className="flex items-center gap-2">
-          {ORDER.map((s) => {
-            const m = STATUS_META[s];
-            const on = active === s;
-            return (
-              <button
-                key={s}
-                onClick={() => setActive(on ? null : s)}
-                className={cn(
-                  "inline-flex items-center gap-2 text-xs font-medium px-3 py-1.5 rounded-full border transition",
-                  on ? "border-transparent" : "border-line bg-white hover:bg-canvas"
-                )}
-                style={on ? { background: m.bg, color: m.fg } : undefined}
-              >
-                <span className="h-2 w-2 rounded-full" style={{ background: m.dot }} />
-                {m.label} {counts[s]}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {isLoading ? (
-        <div className="rounded-card bg-white shadow-card p-8 text-center text-muted text-sm">Loading...</div>
-      ) : (
-        <>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-            {visible.map((d) => {
-              const s = dishStatus(d);
-              const m = STATUS_META[s];
-              return (
-                <Link
-                  key={d.id}
-                  href={`/dish-config/${d.id}`}
-                  className="relative block rounded-card bg-white shadow-card border-t-[3px] hover:shadow-md transition p-3"
-                  style={{ borderTopColor: m.bar }}
-                >
-                  <span
-                    className="absolute top-2 right-2 text-[10px] font-medium px-2 py-0.5 rounded-full"
-                    style={{ background: m.bg, color: m.fg }}
-                  >
-                    {m.label}
-                  </span>
-                  <div className="h-10 w-10 rounded-md bg-canvas overflow-hidden flex items-center justify-center text-muted mb-2">
-                    {isImageUrl(d.reference_image) ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={d.reference_image} alt="" className="h-full w-full object-cover" />
-                    ) : (
-                      <ImageIcon className="h-5 w-5" />
-                    )}
-                  </div>
-                  <div className="text-[13px] font-medium leading-tight pr-2 min-h-[34px]">{d.name}</div>
-                  <div className="text-[11px] text-muted mt-1.5">
-                    {d.category} · {d.expected_grams} g
-                  </div>
-                </Link>
-              );
-            })}
+      <div className="flex flex-col md:flex-row gap-4 md:h-[calc(100vh-13rem)] md:min-h-[460px]">
+        {/* Left: category list */}
+        <aside className="w-full md:w-64 shrink-0 rounded-card bg-white shadow-card border border-line flex flex-col overflow-hidden max-h-[40vh] md:max-h-none">
+          <div className="px-3 py-2.5 border-b border-line text-[11px] font-semibold text-muted uppercase tracking-wide">
+            Categories
           </div>
-          {visible.length === 0 && (
-            <div className="rounded-card bg-white shadow-card p-8 text-center text-muted text-sm mt-3">
-              No items match your search or filter.
+          <div className="flex-1 overflow-y-auto p-1.5">
+            <CatButton
+              name={ALL}
+              n={dishes.length}
+              active={category === ALL && !searching}
+              onClick={() => { setCategory(ALL); setSearch(""); }}
+            />
+            {categories.map((c) => (
+              <CatButton
+                key={c.name}
+                name={c.name}
+                n={c.n}
+                active={!searching && category === c.name}
+                onClick={() => { setCategory(c.name); setSearch(""); }}
+              />
+            ))}
+          </div>
+        </aside>
+
+        {/* Right: items in the selected category */}
+        <section className="flex-1 min-w-0 rounded-card bg-white shadow-card border border-line flex flex-col overflow-hidden">
+          <div className="px-4 py-3 border-b border-line flex flex-wrap items-center gap-3">
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-ink truncate">{searching ? "Search results" : category}</div>
+              <div className="text-[11px] text-muted">
+                {visible.length} item{visible.length === 1 ? "" : "s"}
+              </div>
             </div>
-          )}
-        </>
-      )}
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted" />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                type="search"
+                placeholder="Search all items..."
+                className="w-full text-sm rounded-btn border border-line bg-white pl-9 pr-3 py-2 focus-ring"
+              />
+            </div>
+            <div className="flex items-center gap-1.5">
+              {ORDER.map((s) => {
+                const m = STATUS_META[s];
+                const on = active === s;
+                return (
+                  <button
+                    key={s}
+                    onClick={() => setActive(on ? null : s)}
+                    title={`${m.label}: ${counts[s]}`}
+                    className={cn(
+                      "inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1.5 rounded-full border transition",
+                      on ? "border-transparent" : "border-line bg-white hover:bg-canvas"
+                    )}
+                    style={on ? { background: m.bg, color: m.fg } : undefined}
+                  >
+                    <span className="h-2 w-2 rounded-full" style={{ background: m.dot }} />
+                    {counts[s]}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto">
+            {isLoading ? (
+              <div className="p-8 text-center text-muted text-sm">Loading...</div>
+            ) : visible.length === 0 ? (
+              <div className="p-8 text-center text-muted text-sm">No items match your search or filter.</div>
+            ) : (
+              <ul className="divide-y divide-line">
+                {visible.map((d) => {
+                  const s = dishStatus(d);
+                  const m = STATUS_META[s];
+                  return (
+                    <li key={d.id}>
+                      <Link
+                        href={`/dish-config/${d.id}`}
+                        className="flex items-center gap-3 px-4 py-2.5 hover:bg-canvas transition group"
+                      >
+                        <div className="h-10 w-10 rounded-md bg-canvas overflow-hidden flex items-center justify-center text-muted shrink-0">
+                          {isImageUrl(d.reference_image) ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={d.reference_image} alt="" className="h-full w-full object-cover" />
+                          ) : (
+                            <ImageIcon className="h-5 w-5" />
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[13px] font-medium text-ink truncate">{d.name}</div>
+                          <div className="text-[11px] text-muted truncate">
+                            {d.category} · {d.expected_grams} g
+                          </div>
+                        </div>
+                        <span
+                          className="text-[10px] font-medium px-2 py-0.5 rounded-full shrink-0"
+                          style={{ background: m.bg, color: m.fg }}
+                        >
+                          {m.label}
+                        </span>
+                        <ChevronRight className="h-4 w-4 text-muted shrink-0 group-hover:text-ink" />
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        </section>
+      </div>
     </>
+  );
+}
+
+function CatButton({ name, n, active, onClick }: { name: string; n: number; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "w-full text-left flex items-center justify-between gap-2 px-3 py-2 rounded-md text-[13px] transition",
+        active ? "bg-brand-50 text-brand-700 font-semibold" : "text-ink hover:bg-canvas"
+      )}
+    >
+      <span className="truncate">{name}</span>
+      <span className={cn("text-[11px] shrink-0 tabular-nums", active ? "text-brand-700" : "text-muted")}>{n}</span>
+    </button>
   );
 }
