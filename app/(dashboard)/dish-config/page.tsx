@@ -33,13 +33,30 @@ function isImageUrl(v: string | null): v is string {
   return !!v && /^https?:\/\//.test(v);
 }
 
-// Glowing green dot when live (active in Petpooja); grey dot when not live.
-function LiveDot({ on }: { on: boolean }) {
-  if (!on) return <span className="inline-block h-2 w-2 rounded-full bg-slate-300 shrink-0" />;
+// "Live" = active in Petpooja. A green box with a glowing green pulse and glowing text.
+// "Not live" = a plain grey box. (No dots.)
+function LiveBadge({ on, compact = false }: { on: boolean; compact?: boolean }) {
+  if (!on) {
+    return (
+      <span
+        className={cn(
+          "inline-flex items-center justify-center font-semibold uppercase tracking-wide rounded-md border border-line bg-canvas text-muted",
+          compact ? "text-[9px] px-1.5 py-0.5" : "text-[10px] px-2 py-0.5"
+        )}
+      >
+        Not live
+      </span>
+    );
+  }
   return (
-    <span className="relative inline-flex h-2 w-2 shrink-0">
-      <span className="absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75 animate-ping" />
-      <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500" style={{ boxShadow: "0 0 6px 1px rgba(34,197,94,0.85)" }} />
+    <span
+      className={cn(
+        "nb-live inline-flex items-center justify-center font-bold uppercase tracking-wide rounded-md border border-green-500 bg-green-50 text-green-600",
+        compact ? "text-[9px] px-1.5 py-0.5" : "text-[10px] px-2 py-0.5"
+      )}
+      style={{ textShadow: "0 0 6px rgba(34,197,94,0.75)" }}
+    >
+      Live
     </span>
   );
 }
@@ -95,6 +112,15 @@ export default function MenuLibraryPage() {
 
   return (
     <>
+      {/* Pulsing green glow for the Live badge */}
+      <style>{`
+        @keyframes nbLiveGlow {
+          0%, 100% { box-shadow: 0 0 3px 0 rgba(34,197,94,0.45); }
+          50%      { box-shadow: 0 0 10px 2px rgba(34,197,94,0.9); }
+        }
+        .nb-live { animation: nbLiveGlow 1.6s ease-in-out infinite; }
+      `}</style>
+
       <PageHeader
         title="Menu Library"
         subtitle="Browse by category, then open an item to configure it for KDS & AI Food Inspector"
@@ -111,11 +137,8 @@ export default function MenuLibraryPage() {
       <div className="flex flex-col md:flex-row gap-4 md:h-[calc(100vh-13rem)] md:min-h-[460px]">
         {/* Left: category list */}
         <aside className="w-full md:w-64 shrink-0 rounded-card bg-white shadow-card border border-line flex flex-col overflow-hidden max-h-[40vh] md:max-h-none">
-          <div className="px-3 py-2.5 border-b border-line flex items-center justify-between">
-            <span className="text-[11px] font-semibold text-muted uppercase tracking-wide">Categories</span>
-            <span className="inline-flex items-center gap-1 text-[10px] font-medium text-green-600">
-              <LiveDot on={true} /> live
-            </span>
+          <div className="px-3 py-2.5 border-b border-line text-[11px] font-semibold text-muted uppercase tracking-wide">
+            Categories
           </div>
           <div className="flex-1 overflow-y-auto p-1.5">
             <CatButton
@@ -210,17 +233,11 @@ export default function MenuLibraryPage() {
                             {d.category} · {d.expected_grams} g
                           </div>
                         </div>
-                        <span
-                          className={cn(
-                            "inline-flex items-center gap-1 text-[10px] font-semibold shrink-0 w-14 justify-end",
-                            d.pp_active ? "text-green-600" : "text-muted"
-                          )}
-                          title={d.pp_active ? "Live on Petpooja" : "Not live on Petpooja"}
-                        >
-                          <LiveDot on={d.pp_active} /> {d.pp_active ? "Live" : "Not live"}
+                        <span className="shrink-0 w-16 flex justify-end" title={d.pp_active ? "Live on Petpooja" : "Not live on Petpooja"}>
+                          <LiveBadge on={d.pp_active} />
                         </span>
                         <span
-                          className="text-[10px] font-medium px-2 py-0.5 rounded-full shrink-0"
+                          className="text-[10px] font-medium px-2 py-0.5 rounded-full shrink-0 w-24 text-center"
                           style={{ background: m.bg, color: m.fg }}
                         >
                           {m.label}
@@ -251,7 +268,7 @@ function CatButton({
       )}
     >
       <span className="truncate flex-1">{name}</span>
-      <LiveDot on={live} />
+      <LiveBadge on={live} compact />
       <span className={cn("text-[11px] shrink-0 tabular-nums w-6 text-right", active ? "text-brand-700" : "text-muted")}>{n}</span>
     </button>
   );
