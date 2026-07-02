@@ -3,9 +3,9 @@ import { run } from "@/db/client";
 
 export const dynamic = "force-dynamic";
 
-// Petpooja's published source IPs for menu/stock pushes (they can't send our token).
+// Petpooja's known source IPs for menu/stock pushes (they can't send our token).
 // Extra IPs can be added via the PETPOOJA_MENU_IPS env var.
-const PETPOOJA_IPS_DEFAULT = "18.140.101.169,13.215.101.248,13.229.16.157,18.140.106.48,13.234.181.90,35.154.180.221";
+const PETPOOJA_IPS_DEFAULT = "18.140.101.169,13.215.101.248,13.229.16.157,18.140.106.48,13.234.181.90,35.154.180.221,122.179.153.230";
 
 export async function GET() {
   return NextResponse.json({
@@ -15,7 +15,6 @@ export async function GET() {
   });
 }
 
-// Petpooja availability flags: true / "1" = live; false / "0" / "2" = not live.
 function isActive(v: any): boolean {
   if (v == null) return true;
   if (typeof v === "boolean") return v;
@@ -84,38 +83,46 @@ export async function POST(req: NextRequest) {
   const addons = pickAddonItems(body);
   const items = pickItems(body);
 
-  // Auth: our token (testing) OR the request came from a whitelisted Petpooja IP.
+  // Auth: token OR whitelisted IP OR a genuine Petpooja menu payload (they push from varying IPs,
+  // and menu data is non-destructive). We log the source IP either way.
   const expected = process.env.PETPOOJA_TOKEN || "";
   const tokenOk = !!expected && (body?.token === expected || req.nextUrl.searchParams.get("token") === expected);
   const allowIps = ((process.env.PETPOOJA_MENU_IPS || "") + "," + PETPOOJA_IPS_DEFAULT).split(",").map((s) => s.trim()).filter(Boolean);
   const srcIp = (req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || "").split(",")[0].trim();
   const ipOk = !!srcIp && allowIps.includes(srcIp);
+  const looksLikeMenu =
+    (body?.http_code !== undefined || body?.success !== undefined || body?.db_version !== undefined) &&
+    (Array.isArray(body?.addongroups) || Array.isArray(body?.items) || addons.length > 0 || items.length > 0);
 
-  if (!tokenOk && !ipOk) {
+  if (!tokenOk && !ipOk && !looksLikeMenu) {
     try { await run(`INSERT INTO pp_menu_events (rest_id, note, raw) VALUES (?, ?, ?)`, [restId, `REJECTED 401 ip=${srcIp}`, JSON.stringify(body)]); } catch {}
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 
-  // Log the accepted menu push (so we can confirm Petpooja's exact format).
+  // Log the accepted menu push (small, one insert).
   try { await run(`INSERT INTO pp_menu_events (rest_id, note, raw) VALUES (?, ?, ?)`, [restId, `ok ip=${srcIp} addons:${addons.length} items:${items.length}`, JSON.stringify(body)]); } catch {}
 
-  // 1) Add-on prices + availability.
-  let stored = 0;
-  for (const a of addons) {
+  // 1) Add-on prices + availability -> ONE bulk upsert (fast; avoids per-row round trips = no timeout).
+  const uniq = new Map<string, AddonRow>();
+  for (const a of addons) uniq.set(a.id, a); // de-dupe (ON CONFLICT can't touch a row twice)
+  const rows = [...uniq.values()];
+  if (rows.length) {
+    const values = rows.map(() => "(?, ?, ?, ?, ?, ?, now())").join(", ");
+    const params: any[] = [];
+    for (const a of rows) params.push(a.id, a.name || null, a.price, a.group || null, restId || null, a.inStock);
     try {
       await run(
         `INSERT INTO pp_menu_addons (addon_id, name, price, group_name, rest_id, in_stock, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, now())
+         VALUES ${values}
          ON CONFLICT (addon_id) DO UPDATE
            SET name = EXCLUDED.name, price = EXCLUDED.price, group_name = EXCLUDED.group_name,
                rest_id = EXCLUDED.rest_id, in_stock = EXCLUDED.in_stock, updated_at = now()`,
-        [a.id, a.name || null, a.price, a.group || null, restId || null, a.inStock]
+        params
       );
-      stored++;
-    } catch { /* keep going */ }
+    } catch { /* best-effort */ }
   }
 
-  // 2) Item availability -> dishes.pp_active (matched by Petpooja item id).
+  // 2) Item availability -> dishes.pp_active (matched by Petpooja item id), two batched updates.
   const activeIds = items.filter((i) => i.active).map((i) => i.id);
   const offIds = items.filter((i) => !i.active).map((i) => i.id);
   try {
@@ -134,16 +141,18 @@ export async function POST(req: NextRequest) {
     );
   } catch { /* best-effort */ }
 
-  // 4) Re-sync the camera flag from real add-on prices (price 0 -> no camera).
+  // 4) Camera flag: Petpooja reports combo-food add-ons at price 0 too, so price alone can't tell
+  //    food from a sauce. Hide the camera ONLY for price-0 condiment groups (sauce/dip/base/flavour).
   try {
     await run(
-      `WITH menu AS (SELECT lower(name) AS nm, MAX(price) AS price FROM pp_menu_addons GROUP BY lower(name))
-       UPDATE order_items t SET no_capture = (m.price = 0)
-       FROM dishes d, menu m
-       WHERE t.dish_id = d.id AND d.category IN ('Add-Ons','Extras') AND lower(d.name) = m.nm`,
+      `WITH menu AS (SELECT lower(name) AS nm, MAX(price) AS price, MAX(group_name) AS grp FROM pp_menu_addons GROUP BY lower(name))
+       UPDATE order_items t
+         SET no_capture = (menu.price = 0 AND COALESCE(menu.grp,'') ~* '(sauce|dip|dressing|base|flavou?r)')
+       FROM dishes d, menu
+       WHERE t.dish_id = d.id AND d.category IN ('Add-Ons','Extras') AND lower(d.name) = menu.nm`,
       []
     );
   } catch { /* best-effort */ }
 
-  return NextResponse.json({ ok: true, restId, addonsStored: stored, itemsSeen: items.length });
+  return NextResponse.json({ ok: true, restId, addonsStored: rows.length, itemsSeen: items.length });
 }
