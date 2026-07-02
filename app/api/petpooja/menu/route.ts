@@ -4,38 +4,59 @@ import { one, run } from "@/db/client";
 export const dynamic = "force-dynamic";
 
 // Opening this URL in a browser is a GET -> friendly "alive" message.
-// Petpooja (or our own sync job) sends the menu here via POST.
+// Petpooja's "Push Menu" API POSTs the full menu here after every menu change.
 export async function GET() {
   return NextResponse.json({
     ok: true,
-    service: "Nutriobox Petpooja menu sync",
-    message: "This endpoint stores the Petpooja menu (add-on item prices) via POST.",
+    service: "Nutriobox Petpooja menu sync (Push Menu)",
+    message: "Petpooja pushes the menu here (POST). We store each add-on item's real price.",
   });
 }
 
-// Petpooja's menu JSON puts add-on items under addongroups[].addongroupitems[].
-// Field names can vary slightly by account, so we read them defensively.
-function pickAddonItems(body: any): { id: string; name: string; price: number; group: string }[] {
-  const out: { id: string; name: string; price: number; group: string }[] = [];
-  const groups: any[] = Array.isArray(body?.addongroups) ? body.addongroups
-    : Array.isArray(body?.properties?.addongroups) ? body.properties.addongroups
-    : Array.isArray(body?.menu?.addongroups) ? body.menu.addongroups
-    : [];
+type AddonRow = { id: string; name: string; price: number; group: string };
+
+// Push Menu format: add-on items live in `addongroupitems` (fields addonitemid /
+// addonitem_name / addonitem_price / addongroup_id). Some accounts nest the items inside
+// each `addongroups[]` entry instead. We handle both, and fall back to older field names.
+function pickAddonItems(body: any): AddonRow[] {
+  const root = body?.properties ?? body ?? {};
+  const out: AddonRow[] = [];
+
+  const pushItem = (it: any, group: string) => {
+    const id = String(it?.addonitemid ?? it?.addongroupitemid ?? it?.addon_id ?? it?.id ?? "").trim();
+    if (!id) return;
+    const name = String(it?.addonitem_name ?? it?.addongroupitem_name ?? it?.name ?? "").trim();
+    const price = Number(it?.addonitem_price ?? it?.addongroupitem_price ?? it?.price ?? 0) || 0;
+    out.push({ id, name, price, group });
+  };
+
+  // Map addongroup id -> name, and collect any items nested inside groups.
+  const groupName: Record<string, string> = {};
+  const groups: any[] = Array.isArray(root?.addongroups) ? root.addongroups : [];
   for (const g of groups) {
-    const groupName = String(g?.addongroup_name ?? g?.group_name ?? g?.name ?? "");
-    const gitems: any[] = Array.isArray(g?.addongroupitems) ? g.addongroupitems
-      : Array.isArray(g?.addonitems) ? g.addonitems
-      : Array.isArray(g?.items) ? g.items : [];
-    for (const it of gitems) {
-      const id = String(it?.addongroupitemid ?? it?.addonitemid ?? it?.addon_id ?? it?.id ?? "").trim();
-      if (!id) continue;
-      const name = String(it?.addongroupitem_name ?? it?.addonitem_name ?? it?.name ?? "").trim();
-      const priceRaw = it?.addongroupitem_price ?? it?.addonitem_price ?? it?.price ?? 0;
-      const price = Number(priceRaw) || 0;
-      out.push({ id, name, price, group: groupName });
-    }
+    const gid = String(g?.addongroupid ?? g?.addongroup_id ?? "");
+    const gname = String(g?.addongroup_name ?? g?.group_name ?? g?.name ?? "");
+    if (gid) groupName[gid] = gname;
+    const nested: any[] = Array.isArray(g?.addongroupitems) ? g.addongroupitems
+      : Array.isArray(g?.addonitems) ? g.addonitems : [];
+    for (const it of nested) pushItem(it, gname);
+  }
+
+  // Flat top-level addongroupitems array (the documented Push Menu shape).
+  const flat: any[] = Array.isArray(root?.addongroupitems) ? root.addongroupitems : [];
+  for (const it of flat) {
+    const gid = String(it?.addongroup_id ?? it?.addongroupid ?? "");
+    pushItem(it, groupName[gid] ?? "");
   }
   return out;
+}
+
+function restIdFrom(body: any): string {
+  const root = body?.properties ?? body ?? {};
+  const r = Array.isArray(root?.restaurants) ? root.restaurants[0] : root?.restaurants;
+  return String(
+    root?.restID ?? root?.restaurantid ?? r?.restaurantid ?? r?.res_id ?? r?.restID ?? ""
+  );
 }
 
 export async function POST(req: NextRequest) {
@@ -46,15 +67,25 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "invalid JSON" }, { status: 400 });
   }
 
-  // Same shared secret as the order webhook.
+  const restId = restIdFrom(body);
+  const addons = pickAddonItems(body);
+
+  // Auth model (Push Menu can't send our token):
+  //   1) our token, if present (used for our own testing);
+  //   2) source IP in the Petpooja allow-list (set PETPOOJA_MENU_IPS once Petpooja shares them);
+  //   3) bootstrap: a well-formed menu whose restID maps to one of our known outlets.
   const expected = process.env.PETPOOJA_TOKEN || "";
   const tokenOk = !!expected && (body?.token === expected || req.nextUrl.searchParams.get("token") === expected);
-  if (!tokenOk) {
+  const allowIps = (process.env.PETPOOJA_MENU_IPS || "").split(",").map((s) => s.trim()).filter(Boolean);
+  const srcIp = (req.headers.get("x-forwarded-for") || "").split(",")[0].trim();
+  const ipOk = allowIps.length > 0 && allowIps.includes(srcIp);
+  const knownOutlet = restId ? await one<{ id: number }>(`SELECT id FROM restaurants WHERE pp_rest_id = ? LIMIT 1`, [restId]) : null;
+  const bootstrapOk = !!knownOutlet && addons.length > 0;
+
+  if (!tokenOk && !ipOk && !bootstrapOk) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 
-  const restId = String(body?.restID ?? body?.restaurantid ?? body?.properties?.restID ?? "");
-  const addons = pickAddonItems(body);
   if (addons.length === 0) {
     return NextResponse.json({ ok: true, note: "no add-on items found in payload", stored: 0 });
   }
@@ -90,5 +121,5 @@ export async function POST(req: NextRequest) {
     // re-sync is best-effort; storing the menu already succeeded
   }
 
-  return NextResponse.json({ ok: true, stored, addonsSeen: addons.length });
+  return NextResponse.json({ ok: true, restId, stored, addonsSeen: addons.length });
 }
