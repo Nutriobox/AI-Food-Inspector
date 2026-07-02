@@ -95,12 +95,9 @@ export async function POST(req: NextRequest) {
           for (const ad of addons) {
             const adName = String(ad?.name ?? "").trim();
             if (!adName) continue;
-            const adId = String(ad?.addon_id ?? "");
-            let menuPrice: number | null = null;
-            if (adId) { try { const mr = await one<{ price: string }>(`SELECT price FROM pp_menu_addons WHERE addon_id = ? LIMIT 1`, [adId]); if (mr) menuPrice = Number(mr.price); } catch {} }
-            let adNoCapture: boolean;
-            if (menuPrice !== null) { adNoCapture = !(menuPrice > 0); }
-            else { const adGroup = String(ad?.group_name ?? ""); const adIsCondiment = /(sauce|dip|dressing|\bbase\b|flavou?r)/i.test(adGroup); adNoCapture = adIsCondiment && !(Number(ad?.price) > 0); }
+            const adGroup = String(ad?.group_name ?? "");
+            const adIsCondiment = /(sauce|dip|dressing|\bbase\b|flavou?r)/i.test(adGroup);
+            const adNoCapture = adIsCondiment && !(Number(ad?.price) > 0); // camera for food; hide sauces/bases/flavours
             await run(
               `UPDATE order_items SET no_capture = ?
                  WHERE order_id = ?
@@ -143,22 +140,13 @@ export async function POST(req: NextRequest) {
         const adName = String(ad?.name ?? "").trim();
         if (!adName) continue;
         const adQty = Number(ad?.quantity) > 0 ? Math.floor(Number(ad.quantity)) : 1;
-        // Camera logic (API-driven, no Excel/lookup):
-        //  1) Preferred: the item's REAL price from the Petpooja MENU (item master), matched by the
-        //     add-on's Petpooja addon_id.  price > 0 -> show camera;  0 -> no camera.
-        //  2) Until the menu is synced we fall back to the add-on GROUP, because the ORDER feed sends
-        //     price=0 even for real combo food (e.g. "Choice of Carb" -> Whole Wheat Laccha Parantha).
-        const adId = String(ad?.addon_id ?? "");
-        let menuPrice: number | null = null;
-        if (adId) { try { const mr = await one<{ price: string }>(`SELECT price FROM pp_menu_addons WHERE addon_id = ? LIMIT 1`, [adId]); if (mr) menuPrice = Number(mr.price); } catch {} }
-        let adNoCapture: boolean;
-        if (menuPrice !== null) {
-          adNoCapture = !(menuPrice > 0);
-        } else {
-          const adGroup = String(ad?.group_name ?? "");
-          const adIsCondiment = /(sauce|dip|dressing|\bbase\b|flavou?r)/i.test(adGroup);
-          adNoCapture = adIsCondiment && !(Number(ad?.price) > 0);
-        }
+        // Camera: show for real food (paid extras OR combo-food components), hide only for
+        // sauces / dips / drink-bases / flavour choices. Petpooja reports combo food (e.g.
+        // "Choice of Carb" -> Laccha Parantha) at price 0 in BOTH the order feed and the menu,
+        // so we key off the add-on GROUP from this order's payload, not price alone.
+        const adGroup = String(ad?.group_name ?? "");
+        const adIsCondiment = /(sauce|dip|dressing|\bbase\b|flavou?r)/i.test(adGroup);
+        const adNoCapture = adIsCondiment && !(Number(ad?.price) > 0);
         let adDish = await one<{ id: number }>(`SELECT id FROM dishes WHERE lower(name) = lower(?) AND category IN ('Add-Ons','Extras') LIMIT 1`, [adName]);
         if (!adDish) adDish = await one<{ id: number }>(`INSERT INTO dishes (name, category) VALUES (?, 'Add-Ons') RETURNING id`, [adName]);
         if (adDish) await run(`INSERT INTO order_items (order_id, dish_id, quantity, no_capture) VALUES (?, ?, ?, ?)`, [orderId, adDish.id, adQty, adNoCapture]);
