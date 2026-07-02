@@ -110,3 +110,15 @@ CREATE TABLE IF NOT EXISTS petpooja_events (
   note            TEXT,
   raw             JSONB
 );
+
+-- Petpooja MENU add-on prices (item master). Populated by /api/petpooja/menu.
+-- The camera on the KDS keys off price here: price > 0 -> real food -> show camera; 0 -> no camera.
+-- addon_id matches the order payload's addon_id, so we map order add-ons to their real menu price.
+CREATE TABLE IF NOT EXISTS pp_menu_addons (
+  addon_id    TEXT PRIMARY KEY,
+  name        TEXT,
+  price       NUMERIC NOT NULL DEFAULT 0,
+  group_name  TEXT,
+  rest_id     TEXT,
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
