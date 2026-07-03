@@ -385,6 +385,7 @@ export async function listDishes() {
                JOIN order_items oi ON oi.id = e.order_item_id
                WHERE oi.dish_id = d.id) AS eval
      FROM dishes d
+     WHERE d.category !~* '\\[(sb|sbn)\\]' AND d.name !~* '\\[(sb|sbn)\\]'
      ORDER BY d.name`
   );
 }
