@@ -7,12 +7,12 @@ import { PageHeader } from "@/components/page-header";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
-type Item = { id: string; name: string; priceFrom: number; priceTo: number; inStock: boolean };
+type Item = { id: string; name: string; priceFrom: number; priceTo: number; inStock: boolean; outlets?: number };
 type Group = { id: string; name: string; items: Item[] };
 type MenuView = {
   synced: boolean;
   syncedAt?: string;
-  restId?: string;
+  outletCount?: number;
   categories: Group[];
   addonGroups: Group[];
   counts: { items: number; addons: number };
@@ -67,13 +67,15 @@ export default function PetpoojaMenuPage() {
 
   return (
     <>
-      <PageHeader title="Petpooja Menu" subtitle="The live menu synced from Petpooja — items, add-ons, prices and stock" />
+      <PageHeader title="Petpooja Menu" subtitle="The unified NutrioBox menu synced from Petpooja across all outlets — items, add-ons, prices and stock" />
 
       <div className="rounded-card bg-white shadow-card border border-line px-4 py-3 mb-4 flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
         <div>
           <span className="text-muted text-xs">Last synced from Petpooja</span>{" "}
           <span className="font-medium">{syncedLabel}</span>
-          {data?.restId && <span className="text-muted text-xs"> · outlet {data.restId}</span>}
+          {data?.outletCount != null && (
+            <span className="text-muted text-xs"> · {data.outletCount} outlet{data.outletCount === 1 ? "" : "s"} syncing</span>
+          )}
         </div>
         <div className="ml-auto flex items-center gap-4 text-xs text-muted">
           <span><span className="font-semibold text-ink num">{data?.counts.items ?? 0}</span> items</span>
@@ -138,6 +140,9 @@ export default function PetpoojaMenuPage() {
                     {sec.items.map((it) => (
                       <li key={it.id} className="px-4 py-2.5 flex items-center gap-3">
                         <span className="text-[13px] text-ink flex-1 min-w-0 truncate">{it.name}</span>
+                        {it.outlets != null && it.outlets > 1 && (
+                          <span className="text-[10px] text-muted shrink-0 hidden sm:inline">{it.outlets} outlets</span>
+                        )}
                         <span className="text-[13px] font-medium w-24 text-right"><Price from={it.priceFrom} to={it.priceTo} /></span>
                         <StockBadge on={it.inStock} />
                       </li>
