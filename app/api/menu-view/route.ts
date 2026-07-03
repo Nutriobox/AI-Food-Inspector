@@ -35,10 +35,16 @@ export async function GET() {
   for (const it of Array.isArray(root.items) ? root.items : []) {
     if (String(it?.active ?? "1") === "0") continue; // skip disabled items
     const cid = String(it?.item_categoryid ?? "");
+    const topPrice = Number(it?.price) || 0;
+    const vPrices = (Array.isArray(it?.variation) ? it.variation : [])
+      .map((v: any) => Number(v?.price) || 0)
+      .filter((n: number) => n > 0);
+    const prices = topPrice > 0 ? [topPrice] : vPrices; // variation-priced items keep price in the variation
     (byCat[cid] = byCat[cid] || []).push({
       id: String(it?.itemid ?? ""),
       name: String(it?.itemname ?? "").trim(),
-      price: Number(it?.price) || 0,
+      priceFrom: prices.length ? Math.min(...prices) : 0,
+      priceTo: prices.length ? Math.max(...prices) : 0,
       inStock: itemInStock(it?.in_stock),
       rank: Number(it?.itemrank) || 0,
     });
@@ -59,12 +65,10 @@ export async function GET() {
       name: String(g?.addongroup_name ?? "").trim(),
       rank: Number(g?.addongroup_rank) || 0,
       items: (Array.isArray(g?.addongroupitems) ? g.addongroupitems : [])
-        .map((a: any) => ({
-          id: String(a?.addonitemid ?? ""),
-          name: String(a?.addonitem_name ?? "").trim(),
-          price: Number(a?.addonitem_price) || 0,
-          inStock: addonInStock(a?.active),
-        }))
+        .map((a: any) => {
+          const p = Number(a?.addonitem_price) || 0;
+          return { id: String(a?.addonitemid ?? ""), name: String(a?.addonitem_name ?? "").trim(), priceFrom: p, priceTo: p, inStock: addonInStock(a?.active) };
+        })
         .sort((a: any, b: any) => a.name.localeCompare(b.name)),
     }))
     .filter((g: any) => g.items.length)
