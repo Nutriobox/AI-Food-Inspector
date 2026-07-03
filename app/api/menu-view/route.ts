@@ -3,6 +3,9 @@ import { one } from "@/db/client";
 
 export const dynamic = "force-dynamic";
 
+// Sub-brand items/categories carry a [SB] or [SBN] tag -> not NutrioBox, never shown.
+const SB = /\[(sb|sbn)\]/i;
+
 // Petpooja ITEM stock code: "2" = in stock, "1"/"0" = out of stock.
 function itemInStock(v: any): boolean {
   const s = String(v ?? "").trim().toLowerCase();
@@ -14,10 +17,12 @@ function addonInStock(v: any): boolean {
   return !(s === "0" || s === "false" || s === "out");
 }
 
-// Sub-brand items/categories carry a [SB] or [SBN] tag -> not NutrioBox, never shown.
-const SB = /\[(sb|sbn)\]/i;
+function slug(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "x";
+}
 
-// Returns the latest Petpooja menu (as they pushed it) structured for display.
+// Latest Petpooja menu, structured. Categories / add-on groups are grouped by NAME,
+// so Petpooja's duplicate-named categories (e.g. two "Breads") merge into one section.
 export async function GET() {
   const ev = await one<{ raw: any; received_at: string; rest_id: string }>(
     `SELECT raw, received_at, rest_id FROM pp_menu_events WHERE note LIKE 'ok%' ORDER BY received_at DESC LIMIT 1`
@@ -27,24 +32,23 @@ export async function GET() {
   }
   const root = ev.raw?.properties ?? ev.raw ?? {};
 
-  // category id -> { name, rank }
   const catMap: Record<string, { name: string; rank: number }> = {};
   for (const c of Array.isArray(root.categories) ? root.categories : []) {
-    catMap[String(c?.categoryid ?? "")] = { name: String(c?.categoryname ?? "Uncategorised"), rank: Number(c?.categoryrank) || 0 };
+    catMap[String(c?.categoryid ?? "")] = { name: String(c?.categoryname ?? "Uncategorised").trim(), rank: Number(c?.categoryrank) || 0 };
   }
 
-  // items grouped by category
-  const byCat: Record<string, any[]> = {};
+  const byName: Record<string, { name: string; rank: number; items: any[] }> = {};
   for (const it of Array.isArray(root.items) ? root.items : []) {
-    if (String(it?.active ?? "1") === "0") continue; // skip disabled items
-    const cid = String(it?.item_categoryid ?? "");
-    if (SB.test(String(it?.itemname ?? "")) || SB.test(catMap[cid]?.name ?? "")) continue; // exclude [SB]/[SBN]
+    if (String(it?.active ?? "1") === "0") continue;
+    const cat = catMap[String(it?.item_categoryid ?? "")];
+    const catName = cat?.name ?? "Other";
+    if (SB.test(String(it?.itemname ?? "")) || SB.test(catName)) continue;
     const topPrice = Number(it?.price) || 0;
-    const vPrices = (Array.isArray(it?.variation) ? it.variation : [])
-      .map((v: any) => Number(v?.price) || 0)
-      .filter((n: number) => n > 0);
-    const prices = topPrice > 0 ? [topPrice] : vPrices; // variation-priced items keep price in the variation
-    (byCat[cid] = byCat[cid] || []).push({
+    const vPrices = (Array.isArray(it?.variation) ? it.variation : []).map((v: any) => Number(v?.price) || 0).filter((n: number) => n > 0);
+    const prices = topPrice > 0 ? [topPrice] : vPrices;
+    const g = byName[catName] || (byName[catName] = { name: catName, rank: cat?.rank ?? 999, items: [] });
+    g.rank = Math.min(g.rank, cat?.rank ?? 999);
+    g.items.push({
       id: String(it?.itemid ?? ""),
       name: String(it?.itemname ?? "").trim(),
       priceFrom: prices.length ? Math.min(...prices) : 0,
@@ -53,43 +57,32 @@ export async function GET() {
       rank: Number(it?.itemrank) || 0,
     });
   }
-  const categories = Object.entries(byCat)
-    .map(([cid, items]) => ({
-      id: cid,
-      name: catMap[cid]?.name ?? "Other",
-      rank: catMap[cid]?.rank ?? 999,
-      items: items.sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name)),
-    }))
+  const categories = Object.values(byName)
     .filter((c) => !SB.test(c.name))
-    .sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name));
+    .sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name))
+    .map((c, i) => ({ id: `c${i}-${slug(c.name)}`, name: c.name, items: c.items.sort((a: any, b: any) => a.rank - b.rank || a.name.localeCompare(b.name)) }));
 
-  // add-on groups
-  const addonGroups = (Array.isArray(root.addongroups) ? root.addongroups : [])
-    .map((g: any) => ({
-      id: String(g?.addongroupid ?? ""),
-      name: String(g?.addongroup_name ?? "").trim(),
-      rank: Number(g?.addongroup_rank) || 0,
-      items: (Array.isArray(g?.addongroupitems) ? g.addongroupitems : [])
-        .map((a: any) => {
-          const p = Number(a?.addonitem_price) || 0;
-          return { id: String(a?.addonitemid ?? ""), name: String(a?.addonitem_name ?? "").trim(), priceFrom: p, priceTo: p, inStock: addonInStock(a?.active) };
-        })
-        .filter((a: any) => !SB.test(a.name))
-        .sort((a: any, b: any) => a.name.localeCompare(b.name)),
-    }))
-    .filter((g: any) => g.items.length && !SB.test(g.name))
-    .sort((a: any, b: any) => a.rank - b.rank || a.name.localeCompare(b.name));
+  const byGroup: Record<string, { name: string; rank: number; items: any[] }> = {};
+  for (const gg of Array.isArray(root.addongroups) ? root.addongroups : []) {
+    const gname = String(gg?.addongroup_name ?? "").trim();
+    if (!gname || SB.test(gname)) continue;
+    const grank = Number(gg?.addongroup_rank) || 0;
+    const g = byGroup[gname] || (byGroup[gname] = { name: gname, rank: grank, items: [] });
+    g.rank = Math.min(g.rank, grank);
+    for (const a of Array.isArray(gg?.addongroupitems) ? gg.addongroupitems : []) {
+      const an = String(a?.addonitem_name ?? "").trim();
+      if (!an || SB.test(an)) continue;
+      const p = Number(a?.addonitem_price) || 0;
+      g.items.push({ id: String(a?.addonitemid ?? ""), name: an, priceFrom: p, priceTo: p, inStock: addonInStock(a?.active) });
+    }
+  }
+  const addonGroups = Object.values(byGroup)
+    .sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name))
+    .map((g, i) => ({ id: `a${i}-${slug(g.name)}`, name: g.name, items: g.items.sort((a: any, b: any) => a.name.localeCompare(b.name)) }))
+    .filter((g) => g.items.length);
 
   const itemCount = categories.reduce((n, c) => n + c.items.length, 0);
   const addonCount = addonGroups.reduce((n: number, g: any) => n + g.items.length, 0);
 
-  return NextResponse.json({
-    ok: true,
-    synced: true,
-    syncedAt: ev.received_at,
-    restId: ev.rest_id,
-    categories,
-    addonGroups,
-    counts: { items: itemCount, addons: addonCount },
-  });
+  return NextResponse.json({ ok: true, synced: true, syncedAt: ev.received_at, restId: ev.rest_id, categories, addonGroups, counts: { items: itemCount, addons: addonCount } });
 }
