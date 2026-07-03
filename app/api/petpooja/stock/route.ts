@@ -3,7 +3,7 @@ import { run } from "@/db/client";
 
 export const dynamic = "force-dynamic";
 
-const PETPOOJA_IPS_DEFAULT = "18.140.101.169,13.215.101.248,13.229.16.157,18.140.106.48,13.234.181.90,35.154.180.221";
+const PETPOOJA_IPS_DEFAULT = "18.140.101.169,13.215.101.248,13.229.16.157,18.140.106.48,13.234.181.90,35.154.180.221,122.179.153.230";
 
 // Petpooja "Update Item/addon In-Stock / Out-of-Stock" calls this endpoint to toggle an
 // item's or add-on's availability. We store it as dishes.pp_active, which drives the
