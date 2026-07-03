@@ -7,7 +7,8 @@ const PETPOOJA_IPS_DEFAULT = "18.140.101.169,13.215.101.248,13.229.16.157,18.140
 
 // Petpooja "Update Item/addon In-Stock / Out-of-Stock" calls this endpoint to toggle an
 // item's or add-on's availability. We store it as dishes.pp_active, which drives the
-// green "Live" indicator on the Menu Library.
+// green "Live" indicator on the Menu Library. Every hit is also logged to pp_menu_events
+// (note prefix "stock") so toggles stay auditable during and after integration testing.
 export async function GET() {
   return NextResponse.json({
     ok: true,
@@ -49,6 +50,16 @@ export async function POST(req: NextRequest) {
   const allowIps = (((process.env.PETPOOJA_MENU_IPS || "") + "," + PETPOOJA_IPS_DEFAULT)).split(",").map((s) => s.trim()).filter(Boolean);
   const srcIp = (req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || "").split(",")[0].trim();
   const ipOk = !!srcIp && allowIps.includes(srcIp);
+
+  // Log every hit so toggles are verifiable end-to-end. The "stock" prefix keeps these rows
+  // out of the menu-view query (which reads note LIKE 'ok%').
+  try {
+    await run(
+      `INSERT INTO pp_menu_events (rest_id, note, raw) VALUES (?, ?, ?)`,
+      [restId, `stock ip=${srcIp} type=${type} inStock=${inStock} ids=${ids.join("|")} auth=${tokenOk || ipOk ? "ok" : "REJECT"}`, JSON.stringify(body)]
+    );
+  } catch { /* best-effort */ }
+
   if (!tokenOk && !ipOk) {
     return NextResponse.json({ code: 400, status: "failed", message: "unauthorized" }, { status: 401 });
   }
