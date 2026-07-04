@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { q, one, run } from "@/db/client";
+import { rateLimit, clientIp } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -49,11 +50,17 @@ function extractIds(body: any): string[] {
 }
 
 export async function POST(req: NextRequest) {
+  const rl = await rateLimit("pp_stock", clientIp(req), 600, 60);
+  if (!rl.ok) return NextResponse.json({ code: 429, status: "failed", message: "rate limit exceeded" }, { status: 429 });
+
   let body: any = {};
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ code: 400, status: "failed", message: "invalid JSON" }, { status: 400 });
+  }
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return NextResponse.json({ code: 400, status: "failed", message: "invalid payload" }, { status: 400 });
   }
 
   const restId = String(body?.restaurant_id ?? body?.restID ?? body?.restId ?? "");

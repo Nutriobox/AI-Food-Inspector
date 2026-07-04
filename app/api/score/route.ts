@@ -1,14 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
+import { rateLimit, clientIp } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
-type Body = {
-  image?: string;
-  criteria?: string[];
-  dishName?: string;
-  category?: string;
-  expectedGrams?: number;
-};
+const ScoreSchema = z.object({
+  image: z.string().min(1).max(8_000_000),
+  criteria: z.array(z.string()).max(30).optional(),
+  dishName: z.string().max(200).optional(),
+  category: z.string().max(200).optional(),
+  expectedGrams: z.number().optional(),
+});
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -33,6 +35,10 @@ async function callGemini(url: string, payload: unknown, tries = 4): Promise<Res
 }
 
 export async function POST(req: NextRequest) {
+  // This endpoint calls the paid Gemini API, so cap requests per IP.
+  const rl = await rateLimit("score", clientIp(req), 60, 60);
+  if (!rl.ok) return NextResponse.json({ error: "Too many requests — please wait a few seconds and try again." }, { status: 429 });
+
   const key = process.env.GEMINI_API_KEY;
   if (!key) {
     return NextResponse.json(
@@ -41,8 +47,9 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const body = (await req.json()) as Body;
-  if (!body.image) return NextResponse.json({ error: "No image provided" }, { status: 400 });
+  const parsed = ScoreSchema.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) return NextResponse.json({ error: "Invalid request: a valid image is required." }, { status: 400 });
+  const body = parsed.data;
 
   const match = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.*)$/s.exec(body.image);
   const mimeType = match ? match[1] : "image/jpeg";
