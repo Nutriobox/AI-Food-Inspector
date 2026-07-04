@@ -63,6 +63,7 @@ export default function EvaluatePage() {
   const [streamErr, setStreamErr] = useState<string | null>(null);
 
   const [weight, setWeight] = useState<number>(0);
+  const [capturedWeight, setCapturedWeight] = useState<number>(0); // scale reading locked at the moment of capture
 
   const [captured, setCaptured] = useState<string | null>(null);
   const [aiResult, setAiResult] = useState<ScoreResult | null>(null);
@@ -190,6 +191,7 @@ export default function EvaluatePage() {
   function handleCapture() {
     const d = grabFrame();
     if (!d) { toast.error("Camera not ready"); return; }
+    setCapturedWeight(weight); // lock the scale reading at the instant the photo is taken
     saveCapture(orderId, itemId, d);
     setCaptured(d);
     toast.success("Photo captured — scoring…");
@@ -199,6 +201,7 @@ export default function EvaluatePage() {
   function handleRecapture() {
     const d = grabFrame();
     if (!d) { toast.error("Camera not ready"); return; }
+    setCapturedWeight(weight); // re-lock the scale reading on recapture
     deleteCapture(orderId, itemId);
     saveCapture(orderId, itemId, d);
     setCaptured(d);
@@ -206,8 +209,10 @@ export default function EvaluatePage() {
     runScore(d);
   }
 
-  // Hardware checks (deterministic) — weight vs expected portion.
-  const weightOk = item ? Math.abs(weight - item.expected_grams) <= item.expected_grams * 0.15 : null;
+  // The weight that matters is the reading captured at photo time, not whatever the scale
+  // shows later (the plate is usually removed before the user clicks save).
+  const displayWeight = captured ? capturedWeight : weight;
+  const weightOk = item ? Math.abs(displayWeight - item.expected_grams) <= item.expected_grams * 0.15 : null;
 
   async function saveEvaluation() {
     if (!aiResult) return;
@@ -221,7 +226,7 @@ export default function EvaluatePage() {
             orderItemId: itemId,
             score: aiResult.overallScore ?? 0,
             status: aiResult.verdict ?? (((aiResult.overallScore ?? 0) >= 85) ? "Pass" : (aiResult.overallScore ?? 0) >= 70 ? "Warn" : "Fail"),
-            weight_g: Math.round(weight),
+            weight_g: Math.round(capturedWeight),
             temperature_c: null,
             image: captured,
             notes: aiResult.summary ?? null,
@@ -274,7 +279,7 @@ export default function EvaluatePage() {
         <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
           <div>
             <span className="text-muted">Weight</span>{" "}
-            <span className="num font-semibold">{Math.round(weight)} g</span>
+            <span className="num font-semibold">{Math.round(displayWeight)} g</span>
             {item && <span className="text-muted text-xs"> / target {item.expected_grams} g</span>}
             {weightOk !== null && (
               <span className={cn("ml-1 text-xs", weightOk ? "text-emerald-700" : "text-rose-700")}>
@@ -356,7 +361,7 @@ export default function EvaluatePage() {
               {/* hardware checks */}
               <div className="flex flex-wrap gap-2 text-xs">
                 <span className={cn("inline-flex items-center gap-1 px-2 py-1 rounded-full", weightOk ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700")}>
-                  Weight {Math.round(weight)}g {weightOk ? "✓" : "✗"}
+                  Weight {Math.round(displayWeight)}g {weightOk ? "✓" : "✗"}
                 </span>
               </div>
 
