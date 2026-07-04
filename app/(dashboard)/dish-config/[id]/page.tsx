@@ -66,6 +66,8 @@ export default function DishDetailPage({ params }: { params: { id: string } }) {
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [activeDeviceId, setActiveDeviceId] = useState<string>("");
   const [streamErr, setStreamErr] = useState<string | null>(null);
+  const [stream, setStream] = useState<MediaStream | null>(null);
+  const [camNonce, setCamNonce] = useState(0);
   const dineFileRef = useRef<HTMLInputElement>(null);
   const delivFileRef = useRef<HTMLInputElement>(null);
 
@@ -102,16 +104,18 @@ export default function DishDetailPage({ params }: { params: { id: string } }) {
     if (!activeDeviceId) return;
     let cancelled = false;
     stopStream();
+    setStreamErr(null);
     navigator.mediaDevices
       .getUserMedia({ video: { deviceId: { exact: activeDeviceId } }, audio: false })
-      .then((stream) => {
-        if (cancelled) { stream.getTracks().forEach((t) => t.stop()); return; }
-        streamRef.current = stream;
-        if (videoRef.current) { videoRef.current.srcObject = stream; videoRef.current.play().catch(() => {}); }
+      .then((s) => {
+        if (cancelled) { s.getTracks().forEach((t) => t.stop()); return; }
+        streamRef.current = s;
+        setStream(s);
+        if (videoRef.current) { videoRef.current.srcObject = s; videoRef.current.play().catch(() => {}); }
       })
       .catch((err) => { if (!cancelled) setStreamErr(err?.message ?? "Camera error"); });
     return () => { cancelled = true; stopStream(); };
-  }, [activeDeviceId]);
+  }, [activeDeviceId, camNonce]);
 
   useEffect(() => {
     const url = process.env.NEXT_PUBLIC_WEIGHT_URL || "http://127.0.0.1:8765/weight";
@@ -243,10 +247,13 @@ export default function DishDetailPage({ params }: { params: { id: string } }) {
               <video ref={videoRef} className="w-full h-full object-cover" playsInline muted />
               {streamErr && (
                 <div className="absolute inset-0 flex items-center justify-center text-[11px] text-rose-300 px-4 text-center">
-                  {streamErr} Open this page on the machine (with its camera) to configure.
+                  {streamErr}
                 </div>
               )}
             </div>
+            <button onClick={() => setCamNonce((n) => n + 1)} className="mt-1.5 w-full text-[11px] text-muted hover:text-ink border border-line rounded-btn py-1">
+              Reload camera · if it stays black, close any other NutrioBox tab first
+            </button>
 
             {/* live scale */}
             <div className="mt-3 flex items-center gap-3 rounded-md border border-line bg-canvas px-3 py-2">
@@ -274,6 +281,7 @@ export default function DishDetailPage({ params }: { params: { id: string } }) {
               onClear={() => setDineImg(null)}
               onZoom={() => dineImg && setZoom(dineImg)}
               canCapture={!streamErr}
+              stream={stream}
             />
             <ImageSlot
               label="Expected image · Delivery"
@@ -283,6 +291,7 @@ export default function DishDetailPage({ params }: { params: { id: string } }) {
               onClear={() => setDelivImg(null)}
               onZoom={() => delivImg && setZoom(delivImg)}
               canCapture={!streamErr}
+              stream={stream}
             />
             <input ref={dineFileRef} type="file" accept="image/*" onChange={(e) => onFile(e, "dine")} className="hidden" />
             <input ref={delivFileRef} type="file" accept="image/*" onChange={(e) => onFile(e, "deliv")} className="hidden" />
@@ -347,12 +356,19 @@ export default function DishDetailPage({ params }: { params: { id: string } }) {
 }
 
 function ImageSlot({
-  label, value, onCapture, onUpload, onClear, onZoom, canCapture,
+  label, value, onCapture, onUpload, onClear, onZoom, canCapture, stream,
 }: {
   label: string; value: string | null;
   onCapture: () => void; onUpload: () => void; onClear: () => void; onZoom: () => void; canCapture: boolean;
+  stream: MediaStream | null;
 }) {
   const has = isImageUrl(value);
+  const vref = useRef<HTMLVideoElement>(null);
+  const showLive = !has && !!stream && canCapture;
+  useEffect(() => {
+    const el = vref.current;
+    if (el && stream && showLive) { el.srcObject = stream; el.play().catch(() => {}); }
+  }, [stream, showLive]);
   return (
     <div>
       <div className="text-xs font-medium text-muted mb-1.5">{label}</div>
@@ -364,6 +380,11 @@ function ImageSlot({
             <button onClick={onClear} className="absolute top-1.5 right-1.5 h-6 w-6 rounded-full bg-white/90 border border-line flex items-center justify-center hover:bg-white" aria-label="Remove image">
               <X className="h-3.5 w-3.5" />
             </button>
+          </>
+        ) : showLive ? (
+          <>
+            <video ref={vref} className="h-full w-full object-cover" playsInline muted />
+            <span className="absolute bottom-1.5 left-1.5 text-[10px] bg-black/60 text-white px-1.5 py-0.5 rounded-full">● Live — press Capture</span>
           </>
         ) : (
           <div className="flex flex-col items-center gap-1.5"><ImageIcon className="h-7 w-7" /><span className="text-[11px]">No image</span></div>
