@@ -11,8 +11,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Nutriobox",
-  description: "Food Quality Evaluation Platform",
+  title: "NutrioBox — Food Quality Platform",
+  description: "NutrioBox : Healthy, Tasty & Organic Food Cafes in Delhi NCR",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -20,8 +20,4 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={inter.variable}>
       <body>
         <QueryProvider>{children}</QueryProvider>
-        <Toaster position="bottom-center" richColors />
-      </body>
-    </html>
-  );
-}
+        <Toaster position="bottom-
