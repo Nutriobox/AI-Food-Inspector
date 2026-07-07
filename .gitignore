@@ -17,3 +17,8 @@ data/*.db-wal
 __pycache__/
 pi-weight-service/hx711_pins.json
 pi-weight-service/weight_cal.json
+
+# Local credential exports and working data dumps — never commit
+outlet-login-credentials.csv
+outlet-logins.csv
+outlet-logins.xlsx
