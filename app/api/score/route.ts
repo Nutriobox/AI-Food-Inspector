@@ -47,9 +47,9 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const parsed = ScoreSchema.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: "Invalid request: a valid image is required." }, { status: 400 });
-  const body = parsed.data;
+  const parsedBody = ScoreSchema.safeParse(await req.json().catch(() => null));
+  if (!parsedBody.success) return NextResponse.json({ error: "Invalid request: a valid image is required." }, { status: 400 });
+  const body = parsedBody.data;
 
   const match = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.*)$/s.exec(body.image);
   const mimeType = match ? match[1] : "image/jpeg";
