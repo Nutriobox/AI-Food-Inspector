@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { api, apiPatch } from "@/lib/api";
-import { cn } from "@/lib/utils";
+import { cn, cldThumb } from "@/lib/utils";
 import { dishStatus, STATUS_META } from "@/lib/dish-status";
 
 type Dish = {
@@ -348,7 +348,7 @@ export default function DishDetailPage({ params }: { params: { id: string } }) {
         <div onClick={() => setZoom(null)} className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-6 cursor-zoom-out">
           <button onClick={() => setZoom(null)} className="absolute top-4 right-4 h-9 w-9 rounded-full bg-white/90 flex items-center justify-center hover:bg-white" aria-label="Close"><X className="h-5 w-5" /></button>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={zoom} alt="" onClick={(e) => e.stopPropagation()} className="max-h-[90vh] max-w-[90vw] object-contain rounded-md shadow-2xl cursor-default" />
+          <img src={cldThumb(zoom, 1400)} alt="" onClick={(e) => e.stopPropagation()} className="max-h-[90vh] max-w-[90vw] object-contain rounded-md shadow-2xl cursor-default" />
         </div>
       )}
     </>
@@ -376,7 +376,7 @@ function ImageSlot({
         {has ? (
           <>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={value as string} alt="" onClick={onZoom} className="h-full w-full object-cover cursor-zoom-in" />
+            <img src={cldThumb(value as string)} alt="" onClick={onZoom} className="h-full w-full object-cover cursor-zoom-in" />
             <button onClick={onClear} className="absolute top-1.5 right-1.5 h-6 w-6 rounded-full bg-white/90 border border-line flex items-center justify-center hover:bg-white" aria-label="Remove image">
               <X className="h-3.5 w-3.5" />
             </button>

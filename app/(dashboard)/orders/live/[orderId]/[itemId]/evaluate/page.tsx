@@ -11,7 +11,7 @@ import { type IssueTag } from "@/lib/mock-data";
 import { api } from "@/lib/api";
 import { getCapture, saveCapture, deleteCapture } from "@/lib/captures";
 import dishImages from "@/lib/dish-images.json";
-import { cn } from "@/lib/utils";
+import { cn, cldThumb } from "@/lib/utils";
 
 type ItemDetail = {
   id: number; quantity: number; dish_id: number; dish: string;
@@ -301,7 +301,7 @@ export default function EvaluatePage() {
           <div>
             <div className="text-xs uppercase tracking-wider text-muted mb-1.5">Expected image</div>
             <div className="aspect-video rounded-md bg-canvas border border-line overflow-hidden flex items-center justify-center">
-              {expectedImg ? <img src={expectedImg} alt="expected" className="w-full h-full object-cover" /> : <span className="text-muted text-sm">No reference image</span>}
+              {expectedImg ? <img src={cldThumb(expectedImg)} alt="expected" className="w-full h-full object-cover" /> : <span className="text-muted text-sm">No reference image</span>}
             </div>
           </div>
 
