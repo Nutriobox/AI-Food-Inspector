@@ -363,13 +363,13 @@ export async function getOrderItemDetail(orderItemId: number) {
     `SELECT oi.id, oi.quantity, d.id AS dish_id, d.name AS dish, d.expected_grams, d.reference_image, d.monitored_tags,
             d.category, d.ai_criteria,
             o.code AS order_code, r.name AS restaurant,
-            ev.image AS eval_image, ev.score AS eval_score, ev.status AS eval_status, ev.notes AS eval_notes
+            ev.image AS eval_image, ev.score AS eval_score, ev.status AS eval_status, ev.notes AS eval_notes, ev.weight_g AS eval_weight
      FROM order_items oi
      JOIN dishes d ON d.id = oi.dish_id
      JOIN orders o ON o.id = oi.order_id
      JOIN restaurants r ON r.id = o.restaurant_id
      LEFT JOIN LATERAL (
-       SELECT e.image, e.score, e.status, e.notes
+       SELECT e.image, e.score, e.status, e.notes, e.weight_g
        FROM evaluations e WHERE e.order_item_id = oi.id ORDER BY e.created_at DESC LIMIT 1
      ) ev ON true
      WHERE oi.id = ?`,

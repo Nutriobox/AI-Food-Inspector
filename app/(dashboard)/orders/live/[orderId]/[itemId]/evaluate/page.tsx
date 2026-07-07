@@ -18,7 +18,7 @@ type ItemDetail = {
   expected_grams: number; reference_image: string | null;
   monitored_tags: IssueTag[]; category: string; ai_criteria: string | null;
   order_code: string; restaurant: string;
-  eval_image?: string | null; eval_score?: number | null; eval_status?: "Pass" | "Warn" | "Fail" | null; eval_notes?: string | null;
+  eval_image?: string | null; eval_score?: number | null; eval_status?: "Pass" | "Warn" | "Fail" | null; eval_notes?: string | null; eval_weight?: number | null;
 };
 
 type CriterionResult = { criterion: string; pass: boolean; reason: string };
@@ -137,6 +137,7 @@ export default function EvaluatePage() {
   }, []);
 
   useEffect(() => {
+    if (item?.eval_weight != null) setCapturedWeight(item.eval_weight); // restore the saved scale reading so it doesn't show 0 on reopen
     const local = getCapture(orderId, itemId)?.dataUrl ?? null;
     if (local) { setCaptured(local); return; }
     // No local photo (e.g. viewing a past order on another device) -> load the saved one from the DB.
