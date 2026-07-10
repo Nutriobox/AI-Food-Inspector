@@ -65,16 +65,15 @@ export async function POST(req: NextRequest) {
     (criteria.length
       ? `Criteria:\n${criteria.map((c, i) => `${i + 1}. ${c}`).join("\n")}\n\n`
       : `No specific criteria were provided. Judge the item on: correct dish, garnish/toppings, plating & presentation, and cleanliness.\n\n`) +
-    `Also confirm whether the item in the photo actually matches the dish name above.\n` +
-    `Respond ONLY with strict JSON in exactly this shape:\n` +
-    `{"identifiedAs":"<what you think the dish is>","matchesExpected":true,` +
-    `"criteria":[{"criterion":"<text>","pass":true,"reason":"<short reason>"}],` +
+    `For EACH numbered criterion above, add exactly one matching entry to the "criteria" array, in the same order.\n` +
+    `Respond ONLY with a single complete, minified JSON object in exactly this shape (no markdown, no code fences):\n` +
+    `{"criteria":[{"criterion":"<text>","pass":true,"reason":"<short reason>"}],` +
     `"overallScore":<integer 0-100>,"verdict":"Pass"|"Warn"|"Fail","summary":"<one line>"}`;
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
   const payload = {
     contents: [{ parts: [{ text: prompt }, { inlineData: { mimeType, data } }] }],
-    generationConfig: { temperature: 0.2, responseMimeType: "application/json" },
+    generationConfig: { temperature: 0.2, responseMimeType: "application/json", maxOutputTokens: 2048, thinkingConfig: { thinkingBudget: 0 } },
   };
 
   let res: Response;
@@ -94,8 +93,9 @@ export async function POST(req: NextRequest) {
   }
 
   const json: any = await res.json();
-  const text: string =
+  const rawText: string =
     json?.candidates?.[0]?.content?.parts?.map((p: any) => p.text ?? "").join("") ?? "";
+  const text = rawText.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
 
   let parsed: any = null;
   try {

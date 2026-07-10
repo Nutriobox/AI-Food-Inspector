@@ -354,10 +354,11 @@ export default function EvaluatePage() {
                 {v && <span className="ml-auto text-xs font-medium px-3 py-1.5 rounded-full" style={{ background: v.bg, color: v.fg }}>{aiResult.verdict}</span>}
               </div>
 
-              <div className="text-xs text-muted">
-                Identified as: <span className="text-ink font-medium">{aiResult.identifiedAs ?? "—"}</span>{" · "}
-                {aiResult.matchesExpected ? <span className="text-emerald-700">matches expected item</span> : <span className="text-rose-700">does not match expected item</span>}
-              </div>
+              {aiResult.criteria && aiResult.criteria.length > 0 && (
+                <div className="text-sm text-muted">
+                  <span className="text-ink font-medium">{aiResult.criteria.filter((c) => c.pass).length}</span> of {aiResult.criteria.length} checks passed ({Math.round((aiResult.criteria.filter((c) => c.pass).length / aiResult.criteria.length) * 100)}%)
+                </div>
+              )}
 
               {/* hardware checks */}
               <div className="flex flex-wrap gap-2 text-xs">
