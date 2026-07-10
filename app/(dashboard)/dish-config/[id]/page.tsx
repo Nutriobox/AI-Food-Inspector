@@ -117,6 +117,18 @@ export default function DishDetailPage({ params }: { params: { id: string } }) {
     return () => { cancelled = true; stopStream(); };
   }, [activeDeviceId, camNonce]);
 
+  // Release the single webcam when this tab is backgrounded so the KDS tab can use
+  // it; re-acquire (after a short delay to let the other tab let go) when we return.
+  useEffect(() => {
+    let t: any;
+    const onVis = () => {
+      if (document.hidden) stopStream();
+      else t = setTimeout(() => setCamNonce((n) => n + 1), 400);
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => { document.removeEventListener("visibilitychange", onVis); clearTimeout(t); };
+  }, []);
+
   useEffect(() => {
     const url = process.env.NEXT_PUBLIC_WEIGHT_URL || "http://127.0.0.1:8765/weight";
     let active = true;

@@ -61,6 +61,7 @@ export default function EvaluatePage() {
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [activeDeviceId, setActiveDeviceId] = useState<string>("");
   const [streamErr, setStreamErr] = useState<string | null>(null);
+  const [camNonce, setCamNonce] = useState(0);
 
   const [weight, setWeight] = useState<number>(0);
   const [capturedWeight, setCapturedWeight] = useState<number>(0); // scale reading locked at the moment of capture
@@ -109,7 +110,19 @@ export default function EvaluatePage() {
       })
       .catch((err) => { if (!cancelled) setStreamErr(err?.message ?? "Camera error"); });
     return () => { cancelled = true; stopStream(); };
-  }, [activeDeviceId]);
+  }, [activeDeviceId, camNonce]);
+
+  // Release the single webcam when this tab is backgrounded so the config tab can use
+  // it; re-acquire (after a short delay to let the other tab let go) when we return.
+  useEffect(() => {
+    let t: any;
+    const onVis = () => {
+      if (document.hidden) stopStream();
+      else t = setTimeout(() => setCamNonce((n) => n + 1), 400);
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => { document.removeEventListener("visibilitychange", onVis); clearTimeout(t); };
+  }, []);
 
   // Live weight from the Pi load-cell service (http://127.0.0.1:8765/weight on the
   // machine). Falls back to a simulated reading if that service is not reachable
