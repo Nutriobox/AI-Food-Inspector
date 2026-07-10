@@ -130,7 +130,7 @@ export default function DishDetailPage({ params }: { params: { id: string } }) {
       } catch {}
       if (active) { setWeight(0); setScaleOk(false); }
     };
-    const t = setInterval(tick, 200);
+    const t = setInterval(tick, 1000);
     tick();
     return () => { active = false; clearInterval(t); };
   }, []);
@@ -364,7 +364,7 @@ function ImageSlot({
 }) {
   const has = isImageUrl(value);
   const vref = useRef<HTMLVideoElement>(null);
-  const showLive = !has && !!stream && canCapture;
+  const showLive = false; // single live view is the Machine camera box above; 3 simultaneous video streams overwhelm the Pi
   useEffect(() => {
     const el = vref.current;
     if (el && stream && showLive) { el.srcObject = stream; el.play().catch(() => {}); }
@@ -387,7 +387,7 @@ function ImageSlot({
             <span className="absolute bottom-1.5 left-1.5 text-[10px] bg-black/60 text-white px-1.5 py-0.5 rounded-full">● Live — press Capture</span>
           </>
         ) : (
-          <div className="flex flex-col items-center gap-1.5"><ImageIcon className="h-7 w-7" /><span className="text-[11px]">No image</span></div>
+          <div className="flex flex-col items-center gap-1.5"><ImageIcon className="h-7 w-7" /><span className="text-[11px]">Frame in the camera above, then Capture</span></div>
         )}
       </div>
       <div className="mt-2 grid grid-cols-2 gap-2">
