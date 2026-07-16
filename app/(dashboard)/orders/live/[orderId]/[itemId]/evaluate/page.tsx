@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { type IssueTag } from "@/lib/mock-data";
 import { api } from "@/lib/api";
 import { getCapture, saveCapture, deleteCapture } from "@/lib/captures";
+import { enqueue } from "@/lib/offline-queue";
 import dishImages from "@/lib/dish-images.json";
 import { cn, cldThumb } from "@/lib/utils";
 
@@ -181,7 +182,23 @@ export default function EvaluatePage() {
     return c.toDataURL("image/jpeg", 0.85);
   }
 
-  async function runScore(image: string) {
+  async function queueOffline(image: string, lockedWeight?: number) {
+    try {
+      await enqueue({
+        id: `${orderId}-${itemId}-${Date.now()}`,
+        orderId, itemId, dishName, category: item?.category ?? null,
+        criteria: parseCriteria(item?.ai_criteria), expectedGrams: item?.expected_grams ?? null,
+        image, weight: Math.round(lockedWeight ?? capturedWeight ?? 0), createdAt: Date.now(),
+      });
+      toast.success("Saved offline — it will score & sync automatically when the connection returns.");
+      router.push("/orders/live");
+    } catch {
+      setScoreError("Could not save this capture offline. Please try again once you are back online.");
+    }
+  }
+
+  async function runScore(image: string, lockedWeight?: number) {
+    if (typeof navigator !== "undefined" && !navigator.onLine) { await queueOffline(image, lockedWeight); return; }
     setScoring(true); setScoreError(null); setAiResult(null);
     try {
       const res = await fetch("/api/score", {
@@ -196,6 +213,7 @@ export default function EvaluatePage() {
       if (!res.ok) setScoreError((json?.error ?? "Scoring failed") + (json?.detail ? `  —  ${json.detail}` : ""));
       else setAiResult(json.result as ScoreResult);
     } catch (e: any) {
+      if (typeof navigator !== "undefined" && !navigator.onLine) { await queueOffline(image, lockedWeight); return; }
       setScoreError("Request failed: " + (e?.message ?? "unknown"));
     } finally {
       setScoring(false);
@@ -209,7 +227,7 @@ export default function EvaluatePage() {
     saveCapture(orderId, itemId, d);
     setCaptured(d);
     toast.success("Photo captured — scoring…");
-    runScore(d);
+    runScore(d, weight);
   }
 
   function handleRecapture() {
@@ -220,7 +238,7 @@ export default function EvaluatePage() {
     saveCapture(orderId, itemId, d);
     setCaptured(d);
     setAiResult(null);
-    runScore(d);
+    runScore(d, weight);
   }
 
   // The weight that matters is the reading captured at photo time, not whatever the scale
