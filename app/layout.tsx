@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import { headers } from "next/headers";
 import { Toaster } from "sonner";
 import { QueryProvider } from "@/components/query-provider";
+import { PWA } from "@/components/pwa";
 import "./globals.css";
 
 const inter = Inter({
@@ -17,6 +18,7 @@ export function generateMetadata(): Metadata {
   return {
     title: isKds ? "KDS" : "AI Food Inspector",
     description: "NutrioBox : Healthy, Tasty & Organic Food Cafes in Delhi NCR",
+    manifest: "/manifest.webmanifest",
   };
 }
 
@@ -26,6 +28,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <QueryProvider>{children}</QueryProvider>
         <Toaster position="bottom-center" richColors />
+        <PWA />
       </body>
     </html>
   );
