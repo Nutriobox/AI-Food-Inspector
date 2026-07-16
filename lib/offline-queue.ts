@@ -15,13 +15,15 @@ export type PendingEval = {
 
 const DB_NAME = "nutriobox-offline";
 const STORE = "pending-evals";
+const ORDERS_STORE = "orders-cache";
 
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 1);
+    const req = indexedDB.open(DB_NAME, 2);
     req.onupgradeneeded = () => {
       const db = req.result;
       if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: "id" });
+      if (!db.objectStoreNames.contains(ORDERS_STORE)) db.createObjectStore(ORDERS_STORE, { keyPath: "key" });
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -64,6 +66,31 @@ async function removePending(id: string): Promise<void> {
 
 export async function pendingCount(): Promise<number> {
   try { return (await allPending()).length; } catch { return 0; }
+}
+
+// Cache the last successfully-fetched KDS order list so an offline reload still
+// shows the last-known queue (new orders still require a connection).
+export async function cacheOrders(key: string, orders: unknown[]): Promise<void> {
+  try {
+    const db = await openDb();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(ORDERS_STORE, "readwrite");
+      tx.objectStore(ORDERS_STORE).put({ key, orders, savedAt: Date.now() });
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch { /* ignore cache write failures */ }
+}
+
+export async function getCachedOrders(key: string): Promise<unknown[] | null> {
+  try {
+    const db = await openDb();
+    return await new Promise((resolve, reject) => {
+      const req = db.transaction(ORDERS_STORE, "readonly").objectStore(ORDERS_STORE).get(key);
+      req.onsuccess = () => resolve(req.result ? (req.result.orders as unknown[]) : null);
+      req.onerror = () => reject(req.error);
+    });
+  } catch { return null; }
 }
 
 let syncing = false;

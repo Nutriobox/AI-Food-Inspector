@@ -5,6 +5,7 @@ import { Camera, Info } from "lucide-react";
 import { memo, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { cacheOrders, getCachedOrders } from "@/lib/offline-queue";
 import { hasCapture, getCapture, CAPTURES_CHANGED_EVENT } from "@/lib/captures";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
@@ -193,7 +194,18 @@ export default function KdsPage() {
 
   const { data, isLoading } = useQuery({
     queryKey: ["kds", "live", outlet],
-    queryFn: () => api<{ orders: LiveOrder[] }>(`/api/kds?mode=live${outlet !== "All Restaurants" ? `&restaurant=${encodeURIComponent(outlet)}` : ""}`),
+    queryFn: async () => {
+      const url = `/api/kds?mode=live${outlet !== "All Restaurants" ? `&restaurant=${encodeURIComponent(outlet)}` : ""}`;
+      try {
+        const res = await api<{ orders: LiveOrder[] }>(url);
+        cacheOrders(outlet, res.orders); // remember the last-known queue for offline
+        return res;
+      } catch (e) {
+        const cached = await getCachedOrders(outlet);
+        if (cached) return { orders: cached as LiveOrder[] };
+        throw e;
+      }
+    },
     refetchInterval: 4000,
     refetchIntervalInBackground: true, // keep polling even if the kiosk tab is backgrounded
     retry: false,
