@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getLiveOrders, getPastOrders } from "@/db/queries";
-import { createClient } from "@/lib/supabase/server";
+import { getRequestUser } from "@/lib/supabase/user";
 import { one } from "@/db/client";
 
 export const dynamic = "force-dynamic";
@@ -11,8 +11,10 @@ export async function GET(req: NextRequest) {
 
   // If an OUTLET account is signed in, force-filter to ONLY that outlet's restaurant
   // (so one outlet can never see another outlet's orders). Admins see what they request.
-  const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  //
+  // NB: use getRequestUser (not createClient().auth.getUser()) — the latter only
+  // reads cookies, which native/Bearer clients don't send. See lib/supabase/user.ts.
+  const user = await getRequestUser(req);
   const meta = (user?.user_metadata as any) || {};
   if (meta.role === "outlet") {
     const restId = String(meta.rest_id ?? "");

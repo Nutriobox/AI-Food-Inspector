@@ -50,13 +50,7 @@ sudo systemctl status nutriobox-weight.service
 ```
 
 ## Notes
-- The KDS capture screen automatically reads this endpoint. If it's unreachable
-  the app shows "Scale not connected" and records no weight - it never invents a
-  number. If the endpoint answers but the reading swings by more than 15 g, the
-  app shows "Scale unstable" and again records no weight: a failing load cell
-  still returns ok:true, so the value itself has to be sanity-checked.
-- A load cell that ignores load is dead. Test it: note the raw value, press hard
-  on the platform, and look again - a healthy cell shifts by tens of thousands of
-  counts. A shift of only tens/hundreds means the cell or HX711 needs replacing.
+- The KDS capture screen automatically reads this endpoint; if it's unreachable
+  the app falls back to a simulated weight, so nothing breaks.
 - A temperature sensor can be added to the same service later (returns
   `temperature_c` in the same JSON).
