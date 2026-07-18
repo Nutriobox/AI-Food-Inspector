@@ -26,9 +26,21 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  const {
+  // Cookie session (browser / PWA).
+  let {
     data: { user },
   } = await supabase.auth.getUser();
+
+  // Native clients (the Android KDS) cannot use cookies, so they send the Supabase
+  // access token as a Bearer header instead. The token is verified by Supabase the
+  // same way a cookie session is - this is an additional transport, not a bypass.
+  if (!user) {
+    const authz = request.headers.get("authorization") ?? "";
+    if (authz.toLowerCase().startsWith("bearer ")) {
+      const { data } = await supabase.auth.getUser(authz.slice(7).trim());
+      user = data.user;
+    }
+  }
 
   const path = request.nextUrl.pathname;
   const isPublic = PUBLIC_PREFIXES.some((p) => path === p || path.startsWith(p + "/") || path.startsWith(p));
@@ -37,8 +49,15 @@ export async function middleware(request: NextRequest) {
   const isOutlet = ((user?.user_metadata as any)?.role) === "outlet";
   const home = isOutlet ? "/orders/live" : "/overview";
 
-  // Not logged in + private page -> login
+  const isApi = path.startsWith("/api/");
+
+  // Not logged in + private page -> login.
+  // API routes must answer with JSON: a 302 to an HTML login page makes every
+  // client (native and web alike) try to parse HTML as JSON on an expired session.
   if (!user && !isPublic) {
+    if (isApi) {
+      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    }
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);

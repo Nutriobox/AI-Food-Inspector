@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { api, apiPatch } from "@/lib/api";
 import { cn, cldThumb } from "@/lib/utils";
 import { dishStatus, STATUS_META } from "@/lib/dish-status";
+import { WEIGHT_ENABLED } from "@/lib/features";
 
 type Dish = {
   id: number;
@@ -130,6 +131,7 @@ export default function DishDetailPage({ params }: { params: { id: string } }) {
   }, []);
 
   useEffect(() => {
+    if (!WEIGHT_ENABLED) return; // no scale on a phone - don't poll a dead endpoint
     const url = process.env.NEXT_PUBLIC_WEIGHT_URL || "http://127.0.0.1:8765/weight";
     let active = true;
     const tick = async () => {

@@ -13,6 +13,7 @@ import { getCapture, saveCapture, deleteCapture } from "@/lib/captures";
 import { enqueue } from "@/lib/offline-queue";
 import dishImages from "@/lib/dish-images.json";
 import { cn, cldThumb } from "@/lib/utils";
+import { WEIGHT_ENABLED } from "@/lib/features";
 
 type ItemDetail = {
   id: number; quantity: number; dish_id: number; dish: string;
@@ -28,6 +29,10 @@ type ScoreResult = {
   criteria?: CriterionResult[]; overallScore?: number;
   verdict?: "Pass" | "Warn" | "Fail"; summary?: string;
 };
+
+// A healthy load cell sits within a gram or two at rest. A wider spread than this
+// means the cell is faulty and the number it reports must not be trusted or saved.
+const SCALE_MAX_SPREAD_G = 15;
 
 const VERDICT: Record<string, { bg: string; fg: string }> = {
   Pass: { bg: "#EAF3DE", fg: "#27500A" },
@@ -65,7 +70,10 @@ export default function EvaluatePage() {
   const [camNonce, setCamNonce] = useState(0);
 
   const [weight, setWeight] = useState<number>(0);
+  const [scaleState, setScaleState] = useState<"ok" | "unstable" | "offline">("ok");
+  const samplesRef = useRef<number[]>([]);
   const [capturedWeight, setCapturedWeight] = useState<number>(0); // scale reading locked at the moment of capture
+  const [capturedScaleOk, setCapturedScaleOk] = useState<boolean>(true); // was the scale trustworthy at capture time?
 
   const [captured, setCaptured] = useState<string | null>(null);
   const [aiResult, setAiResult] = useState<ScoreResult | null>(null);
@@ -83,7 +91,12 @@ export default function EvaluatePage() {
     let cancelled = false;
     (async () => {
       try {
-        const probe = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        // Prefer the rear camera on a phone (the front camera is useless for plated
+        // food) and ask for a high resolution - Gemini scores a sharp photo far better.
+        const probe = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+          audio: false,
+        });
         const list = await navigator.mediaDevices.enumerateDevices();
         const cams = list.filter((d) => d.kind === "videoinput");
         const initialId = probe.getVideoTracks()[0]?.getSettings().deviceId ?? cams[0]?.deviceId ?? "";
@@ -103,7 +116,10 @@ export default function EvaluatePage() {
     let cancelled = false;
     stopStream();
     navigator.mediaDevices
-      .getUserMedia({ video: { deviceId: { exact: activeDeviceId } }, audio: false })
+      .getUserMedia({
+        video: { deviceId: { exact: activeDeviceId }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+        audio: false,
+      })
       .then((stream) => {
         if (cancelled) { stream.getTracks().forEach((t) => t.stop()); return; }
         streamRef.current = stream;
@@ -126,9 +142,12 @@ export default function EvaluatePage() {
   }, []);
 
   // Live weight from the Pi load-cell service (http://127.0.0.1:8765/weight on the
-  // machine). Falls back to a simulated reading if that service is not reachable
-  // (e.g. during local development on a laptop).
+  // machine). Shows 0 and flags "offline" if that service is not reachable
+  // (e.g. during local development on a laptop) - it never invents a number.
+  // Also watches the reading for stability: a failing load cell still answers
+  // ok:true but swings wildly, so spread is checked before the value is trusted.
   useEffect(() => {
+    if (!WEIGHT_ENABLED) return; // no scale on a phone - don't poll a dead endpoint
     const url = process.env.NEXT_PUBLIC_WEIGHT_URL || "http://127.0.0.1:8765/weight";
     let active = true;
     const tick = async () => {
@@ -138,12 +157,19 @@ export default function EvaluatePage() {
           const j = await r.json();
           if (active && j?.ok && typeof j.weight_g === "number") {
             setWeight(j.weight_g);
+            const s = samplesRef.current;
+            s.push(j.weight_g);
+            if (s.length > 12) s.shift();
+            if (s.length >= 6) {
+              const spread = Math.max(...s) - Math.min(...s);
+              setScaleState(spread > SCALE_MAX_SPREAD_G ? "unstable" : "ok");
+            }
             return;
           }
         }
       } catch {}
       // Weight service not reachable -> show 0 (never a fake number).
-      if (active) setWeight(0);
+      if (active) { samplesRef.current = []; setWeight(0); setScaleState("offline"); }
     };
     const id = setInterval(tick, 500);
     tick();
@@ -224,6 +250,7 @@ export default function EvaluatePage() {
     const d = grabFrame();
     if (!d) { toast.error("Camera not ready"); return; }
     setCapturedWeight(weight); // lock the scale reading at the instant the photo is taken
+    setCapturedScaleOk(scaleState === "ok"); // ...and whether that reading could be trusted
     saveCapture(orderId, itemId, d);
     setCaptured(d);
     toast.success("Photo captured — scoring…");
@@ -234,6 +261,7 @@ export default function EvaluatePage() {
     const d = grabFrame();
     if (!d) { toast.error("Camera not ready"); return; }
     setCapturedWeight(weight); // re-lock the scale reading on recapture
+    setCapturedScaleOk(scaleState === "ok");
     deleteCapture(orderId, itemId);
     saveCapture(orderId, itemId, d);
     setCaptured(d);
@@ -244,7 +272,11 @@ export default function EvaluatePage() {
   // The weight that matters is the reading captured at photo time, not whatever the scale
   // shows later (the plate is usually removed before the user clicks save).
   const displayWeight = captured ? capturedWeight : weight;
-  const weightOk = item ? Math.abs(displayWeight - item.expected_grams) <= item.expected_grams * 0.15 : null;
+  // Only judge the weight when the scale was actually trustworthy at the time.
+  const scaleTrusted = captured ? capturedScaleOk : scaleState === "ok";
+  const weightOk = item && scaleTrusted
+    ? Math.abs(displayWeight - item.expected_grams) <= item.expected_grams * 0.15
+    : null;
 
   async function saveEvaluation() {
     if (!aiResult) return;
@@ -258,7 +290,7 @@ export default function EvaluatePage() {
             orderItemId: itemId,
             score: aiResult.overallScore ?? 0,
             status: aiResult.verdict ?? (((aiResult.overallScore ?? 0) >= 85) ? "Pass" : (aiResult.overallScore ?? 0) >= 70 ? "Warn" : "Fail"),
-            weight_g: Math.round(capturedWeight),
+            weight_g: WEIGHT_ENABLED && capturedScaleOk ? Math.round(capturedWeight) : null, // null, never a bogus reading
             temperature_c: null,
             image: captured,
             notes: aiResult.summary ?? null,
@@ -309,16 +341,30 @@ export default function EvaluatePage() {
 
       <div className="rounded-card bg-white shadow-card p-4">
         <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
+          {WEIGHT_ENABLED && (
           <div>
             <span className="text-muted">Weight</span>{" "}
-            <span className="num font-semibold">{Math.round(displayWeight)} g</span>
-            {item && <span className="text-muted text-xs"> / target {item.expected_grams} g</span>}
-            {weightOk !== null && (
-              <span className={cn("ml-1 text-xs", weightOk ? "text-emerald-700" : "text-rose-700")}>
-                {weightOk ? "✓" : "✗"}
-              </span>
+            {scaleTrusted ? (
+              <>
+                <span className="num font-semibold">{Math.round(displayWeight)} g</span>
+                {item && <span className="text-muted text-xs"> / target {item.expected_grams} g</span>}
+                {weightOk !== null && (
+                  <span className={cn("ml-1 text-xs", weightOk ? "text-emerald-700" : "text-rose-700")}>
+                    {weightOk ? "✓" : "✗"}
+                  </span>
+                )}
+              </>
+            ) : (
+              <>
+                <span className="num font-semibold text-muted">— g</span>
+                {item && <span className="text-muted text-xs"> / target {item.expected_grams} g</span>}
+                <span className="ml-2 inline-flex items-center rounded-btn bg-[#FAEEDA] text-[#633806] text-xs font-semibold px-2 py-0.5">
+                  {scaleState === "offline" ? "Scale not connected" : "Scale unstable"} — weight not recorded
+                </span>
+              </>
             )}
           </div>
+          )}
           <div className="ml-auto">
             <label className="text-xs text-muted">Camera</label>
             <select value={activeDeviceId} onChange={(e) => setActiveDeviceId(e.target.value)} className="ml-2 rounded-btn border border-line text-sm bg-white px-2 py-1 focus-ring">
@@ -360,8 +406,8 @@ export default function EvaluatePage() {
 
         <div className="flex justify-center mt-4">
           {captured
-            ? <button onClick={handleRecapture} disabled={!!streamErr || scoring} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-btn bg-ink text-white text-sm font-semibold hover:opacity-90 disabled:opacity-50"><RotateCcw className="h-4 w-4" /> Recapture</button>
-            : <button onClick={handleCapture} disabled={!!streamErr} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-btn bg-ink text-white text-sm font-semibold hover:opacity-90 disabled:opacity-50"><Camera className="h-4 w-4" /> Capture</button>}
+            ? <button onClick={handleRecapture} disabled={!!streamErr || scoring} className="inline-flex items-center justify-center gap-2 w-full sm:w-auto px-6 py-4 sm:px-5 sm:py-2.5 rounded-btn bg-ink text-white text-base sm:text-sm font-semibold hover:opacity-90 disabled:opacity-50 active:scale-[0.98] transition"><RotateCcw className="h-4 w-4" /> Recapture</button>
+            : <button onClick={handleCapture} disabled={!!streamErr} className="inline-flex items-center justify-center gap-2 w-full sm:w-auto px-6 py-4 sm:px-5 sm:py-2.5 rounded-btn bg-ink text-white text-base sm:text-sm font-semibold hover:opacity-90 disabled:opacity-50 active:scale-[0.98] transition"><Camera className="h-4 w-4" /> Capture</button>}
         </div>
 
         <canvas ref={canvasRef} className="hidden" />
