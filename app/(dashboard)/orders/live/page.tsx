@@ -192,13 +192,22 @@ export default function KdsPage() {
     enabled: isAdmin,
   });
 
+  const lastCacheRef = useRef(0); // throttles the offline order-cache write
+
   const { data, isLoading } = useQuery({
     queryKey: ["kds", "live", outlet],
     queryFn: async () => {
       const url = `/api/kds?mode=live${outlet !== "All Restaurants" ? `&restaurant=${encodeURIComponent(outlet)}` : ""}`;
       try {
         const res = await api<{ orders: LiveOrder[] }>(url);
-        cacheOrders(outlet, res.orders); // remember the last-known queue for offline
+        // Throttled: the queue is polled every 4s, but rewriting the whole order list
+        // to IndexedDB 900x/hour is pure overhead on the outlet machine. Every 30s is
+        // ample for "show the last-known queue when offline".
+        const now = Date.now();
+        if (now - lastCacheRef.current > 30_000) {
+          lastCacheRef.current = now;
+          cacheOrders(outlet, res.orders);
+        }
         return res;
       } catch (e) {
         const cached = await getCachedOrders(outlet);

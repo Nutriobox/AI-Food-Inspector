@@ -198,14 +198,24 @@ export default function EvaluatePage() {
       ? item.reference_image
       : (dishName && DISH_IMAGES[dishName]) || null;
 
+  // Capturing at full sensor resolution produced ~670KB of base64 per photo, which
+  // (a) filled the 5MB localStorage budget after ~7 captures, (b) made the Gemini
+  // upload slow on outlet wifi, and (c) cost seconds of encode time on the outlet
+  // machine. 1280px at q0.72 is ~120KB and scores identically - Gemini is judging
+  // plating and garnish, not fine detail.
+  const CAPTURE_MAX_EDGE = 1280;
+  const CAPTURE_QUALITY = 0.72;
+
   function grabFrame(): string | null {
     const v = videoRef.current; const c = canvasRef.current;
     if (!v || !c) return null;
-    const w = v.videoWidth || 640; const h = v.videoHeight || 480;
+    const vw = v.videoWidth || 640; const vh = v.videoHeight || 480;
+    const scale = Math.min(1, CAPTURE_MAX_EDGE / Math.max(vw, vh));
+    const w = Math.round(vw * scale); const h = Math.round(vh * scale);
     c.width = w; c.height = h;
     const ctx = c.getContext("2d"); if (!ctx) return null;
     ctx.drawImage(v, 0, 0, w, h);
-    return c.toDataURL("image/jpeg", 0.85);
+    return c.toDataURL("image/jpeg", CAPTURE_QUALITY);
   }
 
   async function queueOffline(image: string, lockedWeight?: number) {
@@ -251,7 +261,11 @@ export default function EvaluatePage() {
     if (!d) { toast.error("Camera not ready"); return; }
     setCapturedWeight(weight); // lock the scale reading at the instant the photo is taken
     setCapturedScaleOk(scaleState === "ok"); // ...and whether that reading could be trusted
-    saveCapture(orderId, itemId, d);
+    if (!saveCapture(orderId, itemId, d)) {
+      // Storage is full and could not be freed. Say so - silently dropping the photo
+      // makes the operator think the item is done when nothing was kept.
+      toast.error("Device storage is full — the photo could not be kept on this device. It will still be scored and saved to the server.");
+    }
     setCaptured(d);
     toast.success("Photo captured — scoring…");
     runScore(d, weight);
@@ -263,7 +277,9 @@ export default function EvaluatePage() {
     setCapturedWeight(weight); // re-lock the scale reading on recapture
     setCapturedScaleOk(scaleState === "ok");
     deleteCapture(orderId, itemId);
-    saveCapture(orderId, itemId, d);
+    if (!saveCapture(orderId, itemId, d)) {
+      toast.error("Device storage is full — the photo could not be kept on this device. It will still be scored and saved to the server.");
+    }
     setCaptured(d);
     setAiResult(null);
     runScore(d, weight);
