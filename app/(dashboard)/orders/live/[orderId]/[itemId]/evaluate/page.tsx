@@ -34,6 +34,11 @@ type ScoreResult = {
 // means the cell is faulty and the number it reports must not be trusted or saved.
 const SCALE_MAX_SPREAD_G = 15;
 
+// Leaving this screen returns to the Past board: by the time an operator backs out
+// of an evaluation the ticket has normally just been completed, and Past is where it
+// now lives. (The Live tab is one tap away if the order still has items outstanding.)
+const BACK_TO_KDS = "/orders/live?tab=past";
+
 const VERDICT: Record<string, { bg: string; fg: string }> = {
   Pass: { bg: "#EAF3DE", fg: "#27500A" },
   Warn: { bg: "#FAEEDA", fg: "#633806" },
@@ -227,7 +232,7 @@ export default function EvaluatePage() {
         image, weight: Math.round(lockedWeight ?? capturedWeight ?? 0), createdAt: Date.now(),
       });
       toast.success("Saved offline — it will score & sync automatically when the connection returns.");
-      router.push("/orders/live");
+      router.push(BACK_TO_KDS);
     } catch {
       setScoreError("Could not save this capture offline. Please try again once you are back online.");
     }
@@ -334,7 +339,7 @@ export default function EvaluatePage() {
       qc.invalidateQueries({ queryKey: ["overview"] });
       qc.invalidateQueries({ queryKey: ["ai-scores"] });
       toast.success("Evaluation saved");
-      router.push("/orders/live");
+      router.push(BACK_TO_KDS);
     } catch (e: any) {
       toast.error(`Save failed: ${e?.message ?? "unknown"}`);
     } finally {
@@ -347,7 +352,7 @@ export default function EvaluatePage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <Link href="/orders/live" className="inline-flex items-center gap-1 text-sm text-muted hover:text-ink">
+        <Link href={BACK_TO_KDS} className="inline-flex items-center gap-1 text-sm text-muted hover:text-ink">
           <ChevronLeft className="h-4 w-4" /> Back to KDS
         </Link>
         <div className="text-xs text-muted num">{item ? `${item.order_code} · ${item.restaurant}` : "—"}</div>

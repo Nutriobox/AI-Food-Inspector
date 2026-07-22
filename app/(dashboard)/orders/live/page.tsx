@@ -138,6 +138,15 @@ function ElapsedTimer({ placedAt }: { placedAt: string }) {
 
 export default function KdsPage() {
   const [tab, setTab] = useState<Tab>("live");
+
+  // Honour ?tab=past so a caller can land the user on the right board - e.g. coming
+  // back from an evaluation, where the ticket has usually just moved into Past.
+  // Read after mount rather than during render: this is a client component and
+  // reading window during SSR would cause a hydration mismatch.
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get("tab");
+    if (t === "past" || t === "live") setTab(t);
+  }, []);
   const [outlet, setOutlet] = useState("All Restaurants");
   const [isAdmin, setIsAdmin] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
