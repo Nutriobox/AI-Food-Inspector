@@ -126,4 +126,16 @@ export function deleteCapture(orderId: number | string, itemId: number | string)
   window.dispatchEvent(new Event(CHANGED_EVENT));
 }
 
+/**
+ * When this item was captured, as epoch ms, or 0 if it never was.
+ * Read from the key index, so this is O(1) and never touches the image payload -
+ * it is called per item, per order, on every render of the live board.
+ */
+export function captureTime(orderId: number | string, itemId: number | string): number {
+  if (typeof window === "undefined") return 0;
+  let ix = readIndex();
+  if (Object.keys(ix).length === 0) ix = rebuildIndex();
+  return ix[keyFor(orderId, itemId)] ?? 0;
+}
+
 export const CAPTURES_CHANGED_EVENT = CHANGED_EVENT;

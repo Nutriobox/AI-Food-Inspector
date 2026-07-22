@@ -6,7 +6,7 @@ import { memo, useEffect, useMemo, useRef, useState, useSyncExternalStore } from
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { cacheOrders, getCachedOrders } from "@/lib/offline-queue";
-import { hasCapture, getCapture, CAPTURES_CHANGED_EVENT } from "@/lib/captures";
+import { hasCapture, getCapture, captureTime, CAPTURES_CHANGED_EVENT } from "@/lib/captures";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 
@@ -335,6 +335,10 @@ export default function KdsPage() {
   );
 }
 
+// An order that has been part-captured glows for this long from its most recent
+// photo, reminding staff that items under that ticket are still outstanding.
+const CAPTURE_DUE_MS = 15 * 60 * 1000;
+
 const OrderCard = memo(function OrderCard({ order, past, v }: { order: LiveOrder; past: boolean; v: number }) {
   void v; // re-render trigger when captures change
   const mains = order.items.filter((i) => !i.isAddon);
@@ -344,10 +348,32 @@ const OrderCard = memo(function OrderCard({ order, past, v }: { order: LiveOrder
     ? (TYPE_STYLES[order.order_type ?? ""] ?? CHANNEL_STYLES.POS)
     : (CHANNEL_STYLES[order.channel] ?? CHANNEL_STYLES.POS);
   const note = (order.notes ?? "").replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]*>/g, "").replace(/[ \t]+/g, " ").trim();
+
+  // Capture-due glow: at least one item photographed, but not all of them, and the
+  // most recent photo was under 15 minutes ago. Started-but-unfinished is the case
+  // worth flagging - an untouched ticket is simply new, and a finished one is done.
+  const evaluatable = order.items.filter((i) => !i.noCapture);
+  const doneCount = evaluatable.filter((i) => i.evaluated || hasCapture(order.id, i.id)).length;
+  const lastCaptureAt = evaluatable.reduce((max, i) => Math.max(max, captureTime(order.id, i.id)), 0);
+  const captureDue =
+    !past &&
+    doneCount > 0 &&
+    doneCount < evaluatable.length &&
+    lastCaptureAt > 0 &&
+    Date.now() - lastCaptureAt < CAPTURE_DUE_MS;
+  const remaining = evaluatable.length - doneCount;
   const placedTime = new Date(order.placed_at).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true });
 
   return (
-    <article className="rounded-card bg-white shadow-card overflow-hidden border border-line flex flex-col h-[240px]">
+    <article
+      className={cn(
+        // Tall enough that three item rows (~60px each) are always visible; a 4th+
+        // item still scrolls, which keeps the grid even across mixed order sizes.
+        "rounded-card bg-white shadow-card overflow-hidden border flex flex-col h-[330px]",
+        captureDue ? "nb-capture-due" : "border-line"
+      )}
+      aria-label={captureDue ? `${remaining} item${remaining === 1 ? "" : "s"} still to capture` : undefined}
+    >
       {/* Yellow header */}
       <header className="bg-amber-400 text-amber-950 px-3 py-2 flex items-center justify-between gap-2 shrink-0">
         <div className="flex items-baseline gap-2 min-w-0">
@@ -355,7 +381,9 @@ const OrderCard = memo(function OrderCard({ order, past, v }: { order: LiveOrder
           <span className="text-[12px] text-amber-900/80 truncate">{order.customer}</span>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <span className="text-[11px] num">{mains.length} {mains.length === 1 ? "item" : "items"}</span>
+          <span className="text-[11px] num">
+            {evaluatable.length > 0 ? `${doneCount}/${evaluatable.length} shot` : `${mains.length} ${mains.length === 1 ? "item" : "items"}`}
+          </span>
           <span className={cn("text-[10px] font-semibold px-1.5 py-0.5 rounded-md", badgeCls)}>{badgeLabel}</span>
         </div>
       </header>
