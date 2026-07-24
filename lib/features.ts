@@ -1,10 +1,14 @@
-// Weight capture is currently OFF.
+// Weight capture is ON.
 //
-// The outlets now run this app as an installable PWA on a dedicated Android phone
-// instead of the Raspberry Pi + HX711 load-cell station, so there is no scale
-// attached. With this false the app hides the weight UI, does not poll the local
-// weight service, and stores weight_g as null rather than a meaningless number.
+// This outlet runs the Raspberry Pi + HX711 load-cell station. The cell was
+// replaced and recalibrated on 2026-07-22 (scale ~391 counts/g, empty reads a
+// stable 0), so the weight check is enabled again.
 //
-// Every dish keeps its expected_grams in the database, so flipping this back to
-// true is all that is needed to bring the weight check back when a scale exists.
-export const WEIGHT_ENABLED: boolean = false;
+// With this true the KDS shows the live weight, polls the local weight service,
+// applies the +/-15% tolerance against each dish's expected_grams, and refuses to
+// save a reading while the scale is unstable (see the evaluate screen's scale guard).
+//
+// To run on a phone with no scale, set this back to false: the weight UI hides, the
+// service is not polled, and weight_g is stored as null. expected_grams is retained
+// per dish either way, so this flag is the only switch.
+export const WEIGHT_ENABLED: boolean = true;
