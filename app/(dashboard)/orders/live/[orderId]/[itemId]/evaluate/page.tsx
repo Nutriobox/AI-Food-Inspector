@@ -166,7 +166,13 @@ export default function EvaluatePage() {
             s.push(j.weight_g);
             if (s.length > 12) s.shift();
             if (s.length >= 6) {
-              const spread = Math.max(...s) - Math.min(...s);
+              // Judge stability on the spread AFTER discarding the single highest and
+              // lowest sample. One stray reading that slips past the driver's filter
+              // should not lock the operator out; a genuinely jumpy scale still trips
+              // this, because several samples will be spread out, not just one.
+              const sorted = [...s].sort((a, b) => a - b);
+              const trimmed = sorted.slice(1, -1);
+              const spread = trimmed[trimmed.length - 1] - trimmed[0];
               setScaleState(spread > SCALE_MAX_SPREAD_G ? "unstable" : "ok");
             }
             return;

@@ -70,30 +70,49 @@ def _read_raw_once():
     lgpio.gpio_write(_h, SCK_PIN, 0)
     if count & 0x800000:        # 24-bit two's complement -> signed
         count -= 0x1000000
+    # A glitched read (the bit-bang clock got preempted by the OS under CPU load)
+    # tends to land at the ADC rails. Reject those outright so they never enter the
+    # sample set - a saturated value is never a real portion weight.
+    if count <= -0x7FFFF0 or count >= 0x7FFFF0:
+        raise ValueError("HX711 rail value (glitched read)")
     return count
 
+def _median(xs):
+    ys = sorted(xs); n = len(ys); m = n // 2
+    return ys[m] if n % 2 else (ys[m - 1] + ys[m]) / 2
+
 def read_raw(samples=20):
+    """Median of many samples with MAD-based outlier rejection.
+
+    The HX711 is bit-banged from Python, so when the CPU is busy (Chromium + the
+    KDS running on the same Pi) the OS can preempt the read mid-clock and corrupt a
+    sample. A plain mean lets one such spike wreck the reading - which showed up as
+    the KDS reporting 'Scale unstable'. The median ignores spikes, and we then drop
+    anything more than 5x the median absolute deviation from it before averaging the
+    survivors, so the returned value reflects the real, quiet signal."""
     vals = []
     with _lock:
-        for _ in range(samples):
+        # Over-sample: ask for extra so we still have plenty after rejecting glitches.
+        for _ in range(samples * 2):
             try:
                 vals.append(_read_raw_once())
-            except TimeoutError:
+            except (TimeoutError, ValueError):
+                continue  # skip a glitched/not-ready sample, keep going
+            if len(vals) >= samples:
                 break
-            time.sleep(0.002)
-    if not vals:
-        raise TimeoutError("no HX711 samples")
-    vals.sort()
-    # trimmed mean: drop the lowest/highest 25% then average the middle (stable)
-    k = max(0, len(vals) // 4)
-    mid = vals[k: len(vals) - k] or vals
-    return sum(mid) / len(mid)
+            time.sleep(0.001)
+    if len(vals) < 3:
+        raise TimeoutError("no clean HX711 samples")
+    med = _median(vals)
+    dev = _median([abs(v - med) for v in vals]) or 1.0  # MAD (never zero-divide)
+    keep = [v for v in vals if abs(v - med) <= 5 * dev]
+    return sum(keep) / len(keep) if keep else med
 
 # Zero-zone: readings within +/- this many grams of zero report exactly 0.
 DEADZONE = float(os.environ.get("WEIGHT_DEADZONE", "5"))
 
 def read_grams():
-    raw = read_raw(3)   # few samples = fast live response
+    raw = read_raw(11)  # median of 11 clean samples - steady even under CPU load
     g = (raw - _cal["offset"]) / _cal["scale"]
     return g, raw
 
