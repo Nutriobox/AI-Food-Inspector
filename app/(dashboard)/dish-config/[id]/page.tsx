@@ -82,6 +82,22 @@ export default function DishDetailPage({ params }: { params: { id: string } }) {
     if (videoRef.current) videoRef.current.srcObject = null;
   }
 
+  // Turn a getUserMedia failure into something an outlet operator can act on.
+  function camError(err: any): string {
+    const name = err?.name || "";
+    if (name === "NotAllowedError" || name === "SecurityError")
+      return "Camera blocked. Click the camera icon in the address bar, choose Allow, then tap Reload camera below.";
+    if (name === "NotReadableError" || name === "TrackStartError" || name === "AbortError")
+      return "Camera is busy in another tab or app. Close the KDS tab/window, then tap Reload camera.";
+    if (name === "NotFoundError" || name === "DevicesNotFoundError")
+      return "No camera detected. Check the USB webcam is plugged in, then tap Reload camera.";
+    if (name === "OverconstrainedError")
+      return "The selected camera is unavailable. Pick another from the list, or tap Reload camera.";
+    if (typeof window !== "undefined" && !window.isSecureContext)
+      return "Camera needs a secure (https) connection. Open the site via https://, not http:// or an IP.";
+    return err?.message || "Could not access the camera. Tap Reload camera.";
+  }
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -95,7 +111,7 @@ export default function DishDetailPage({ params }: { params: { id: string } }) {
         setDevices(cams);
         setActiveDeviceId(initialId);
       } catch (err: any) {
-        if (!cancelled) setStreamErr(err?.message ?? "Could not access camera.");
+        if (!cancelled) setStreamErr(camError(err));
       }
     })();
     return () => { cancelled = true; stopStream(); };
@@ -106,15 +122,25 @@ export default function DishDetailPage({ params }: { params: { id: string } }) {
     let cancelled = false;
     stopStream();
     setStreamErr(null);
+    const attach = (s: MediaStream) => {
+      if (cancelled) { s.getTracks().forEach((t) => t.stop()); return; }
+      streamRef.current = s;
+      setStream(s);
+      setStreamErr(null);
+      if (videoRef.current) { videoRef.current.srcObject = s; videoRef.current.play().catch(() => {}); }
+    };
     navigator.mediaDevices
       .getUserMedia({ video: { deviceId: { exact: activeDeviceId } }, audio: false })
-      .then((s) => {
-        if (cancelled) { s.getTracks().forEach((t) => t.stop()); return; }
-        streamRef.current = s;
-        setStream(s);
-        if (videoRef.current) { videoRef.current.srcObject = s; videoRef.current.play().catch(() => {}); }
-      })
-      .catch((err) => { if (!cancelled) setStreamErr(err?.message ?? "Camera error"); });
+      .then(attach)
+      .catch(() => {
+        // The exact device id can be stale or momentarily busy; fall back to "any
+        // camera" before giving up, so a device-id mismatch doesn't blank the preview.
+        if (cancelled) return;
+        navigator.mediaDevices
+          .getUserMedia({ video: true, audio: false })
+          .then(attach)
+          .catch((err) => { if (!cancelled) setStreamErr(camError(err)); });
+      });
     return () => { cancelled = true; stopStream(); };
   }, [activeDeviceId, camNonce]);
 
