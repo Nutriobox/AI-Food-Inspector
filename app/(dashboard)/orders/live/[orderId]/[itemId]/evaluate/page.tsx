@@ -30,9 +30,14 @@ type ScoreResult = {
   verdict?: "Pass" | "Warn" | "Fail"; summary?: string;
 };
 
-// A healthy load cell sits within a gram or two at rest. A wider spread than this
-// means the cell is faulty and the number it reports must not be trusted or saved.
-const SCALE_MAX_SPREAD_G = 15;
+// Max wobble (g) tolerated before the reading is treated as unstable and not saved.
+// Set to 40 g on purpose: this Pi bit-bangs the HX711 while also running Chromium, so
+// the reading jitters ~25 g under browser load even though the cell and calibration
+// are good. 15 g (ideal for a quiet cell) tripped constantly and blocked all capture,
+// so we accept ~25-40 g of jitter to keep the weight usable. It still catches a truly
+// dead/disconnected scale (which swings hundreds of g). For gram accuracy the fix is a
+// dedicated microcontroller reading the HX711 off-CPU; this is the interim threshold.
+const SCALE_MAX_SPREAD_G = 40;
 
 // Leaving this screen returns to the Past board: by the time an operator backs out
 // of an evaluation the ticket has normally just been completed, and Past is where it

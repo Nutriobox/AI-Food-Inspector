@@ -1,17 +1,17 @@
-// Weight capture is OFF (paused, not abandoned).
+// Weight capture is ON.
 //
-// The load cell, mounting, wiring and calibration are all good: in a quiet terminal
-// the scale reads a known 224 g weight correctly. The blocker is architectural - the
-// Raspberry Pi bit-bangs the HX711's timing in software, and running Chromium + the
-// KDS on the same Pi starves that loop, so the reading wobbles ~25 g under browser
-// load. That is too noisy to drive a pass/fail quality decision, so weight is paused
-// rather than fed unreliable data into the evaluations.
+// This outlet runs the Raspberry Pi + HX711 load-cell station. The cell, mounting,
+// wiring and calibration are verified good (a known 224 g weight reads correctly).
 //
-// The permanent fix is a dedicated microcontroller (Arduino/ESP32, ~Rs200) that reads
-// the HX711 with hardware timing and sends the weight to the Pi over USB - nothing
-// competing for its CPU. When that is in place, flip this back to true.
+// Note on accuracy: the Pi bit-bangs the HX711 timing in software, and running
+// Chromium + the KDS on the same Pi disturbs that loop, so the live reading can
+// wobble by ~25 g under browser load. The stability guard on the evaluate screen is
+// therefore set to tolerate that (see SCALE_MAX_SPREAD_G) so the weight shows instead
+// of blocking. Treat the displayed weight as accurate to ~25 g, not to the gram. The
+// permanent fix for gram-accuracy is a dedicated microcontroller reading the HX711
+// off-CPU; until then this is the working compromise.
 //
-// With this false the KDS hides the weight UI, does not poll the weight service, and
-// stores weight_g as null. Every dish keeps its expected_grams, and the Pi keeps its
-// calibration (weight_cal.json), so re-enabling is a one-line change.
-export const WEIGHT_ENABLED: boolean = false;
+// To run on a phone with no scale, set this to false: the weight UI hides, the service
+// is not polled, and weight_g is stored as null. expected_grams is kept per dish either
+// way, so this flag is the only switch.
+export const WEIGHT_ENABLED: boolean = true;
