@@ -166,19 +166,24 @@ export default function EvaluatePage() {
         if (r.ok) {
           const j = await r.json();
           if (active && j?.ok && typeof j.weight_g === "number") {
-            setWeight(j.weight_g);
             const s = samplesRef.current;
             s.push(j.weight_g);
-            if (s.length > 12) s.shift();
-            if (s.length >= 6) {
-              // Judge stability on the spread AFTER discarding the single highest and
-              // lowest sample. One stray reading that slips past the driver's filter
-              // should not lock the operator out; a genuinely jumpy scale still trips
-              // this, because several samples will be spread out, not just one.
+            // Judge stability on only the last ~2.5s, not a long window. A long window
+            // kept the moment BEFORE the item was placed in view, so right after you
+            // set a dish down the spread stayed huge (old 0 vs new 224) and the scale
+            // read "unstable" for seconds even though it had already settled - while a
+            // terminal looked fine, because there you just wait and read the settled
+            // value. Short window + median display reproduces that "wait and read".
+            if (s.length > 5) s.shift();
+            if (s.length >= 3) {
               const sorted = [...s].sort((a, b) => a - b);
-              const trimmed = sorted.slice(1, -1);
+              const mid = sorted[Math.floor(sorted.length / 2)];       // steady display
+              const trimmed = sorted.length >= 4 ? sorted.slice(1, -1) : sorted; // drop 1 hi/lo
               const spread = trimmed[trimmed.length - 1] - trimmed[0];
+              setWeight(mid);
               setScaleState(spread > SCALE_MAX_SPREAD_G ? "unstable" : "ok");
+            } else {
+              setWeight(j.weight_g);
             }
             return;
           }
