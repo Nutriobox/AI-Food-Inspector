@@ -82,6 +82,7 @@ export default function EvaluatePage() {
   const [weight, setWeight] = useState<number>(0);
   const [scaleState, setScaleState] = useState<"ok" | "unstable" | "offline">("ok");
   const samplesRef = useRef<number[]>([]);
+  const unstableCountRef = useRef(0); // consecutive jumpy polls, so brief settling isn't flagged
   const [capturedWeight, setCapturedWeight] = useState<number>(0); // scale reading locked at the moment of capture
   const [capturedScaleOk, setCapturedScaleOk] = useState<boolean>(true); // was the scale trustworthy at capture time?
 
@@ -181,7 +182,17 @@ export default function EvaluatePage() {
               const trimmed = sorted.length >= 4 ? sorted.slice(1, -1) : sorted; // drop 1 hi/lo
               const spread = trimmed[trimmed.length - 1] - trimmed[0];
               setWeight(mid);
-              setScaleState(spread > SCALE_MAX_SPREAD_G ? "unstable" : "ok");
+              // Only flag "unstable" if the reading stays jumpy for a sustained stretch
+              // (~3s). Brief jumpiness while placing or lifting an item is normal settling,
+              // not a fault, so we don't flash the warning during it - only a persistently
+              // jumpy (genuinely broken/disconnected) scale trips it.
+              if (spread > SCALE_MAX_SPREAD_G) {
+                unstableCountRef.current += 1;
+                if (unstableCountRef.current >= 6) setScaleState("unstable");
+              } else {
+                unstableCountRef.current = 0;
+                setScaleState("ok");
+              }
             } else {
               setWeight(j.weight_g);
             }
