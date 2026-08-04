@@ -208,6 +208,25 @@ export default function EvaluatePage() {
     return () => { active = false; clearInterval(id); };
   }, []);
 
+  // One-tap zero for the operator: taps the scale's /tare so staff can re-zero from
+  // the screen instead of a terminal command. Platform should be empty when tapped.
+  const [taring, setTaring] = useState(false);
+  async function tareScale() {
+    const base = (process.env.NEXT_PUBLIC_WEIGHT_URL || "http://127.0.0.1:8765/weight").replace(/\/weight$/, "");
+    setTaring(true);
+    try {
+      const r = await fetch(`${base}/tare`, { method: "POST" });
+      if (!r.ok) throw new Error();
+      samplesRef.current = [];
+      unstableCountRef.current = 0;
+      toast.success("Scale zeroed");
+    } catch {
+      toast.error("Could not zero the scale — is the platform empty and the service running?");
+    } finally {
+      setTaring(false);
+    }
+  }
+
   useEffect(() => {
     if (item?.eval_weight != null) setCapturedWeight(item.eval_weight); // restore the saved scale reading so it doesn't show 0 on reopen
     const local = getCapture(orderId, itemId)?.dataUrl ?? null;
@@ -410,6 +429,16 @@ export default function EvaluatePage() {
                   {scaleState === "offline" ? "Scale not connected" : "Scale unstable"} — weight not recorded
                 </span>
               </>
+            )}
+            {scaleState !== "offline" && (
+              <button
+                onClick={tareScale}
+                disabled={taring}
+                title="Zero the scale — empty the platform first"
+                className="ml-3 inline-flex items-center rounded-btn border border-line text-xs font-semibold px-2 py-1 hover:bg-canvas disabled:opacity-50"
+              >
+                {taring ? "Zeroing…" : "Zero scale"}
+              </button>
             )}
           </div>
           )}
