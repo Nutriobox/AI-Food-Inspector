@@ -1,0 +1,193 @@
+{
+  "info": {
+    "name": "NutrioBox WMS - PACT Webhook",
+    "description": "Real-time factory-stage events from PACT into the NutrioBox app (KDS / AI Food Inspector).\n\nEndpoint: POST {{base_url}}/api/vouchers/pact-webhook\nAuth: header  Authorization: Bearer {{token}}  OR  x-api-key: {{token}}\nBody: JSON, one call per event, tagged with an \"event\" field.\nEvents: PMR, STOCK_RECEIPT, ISSUE_TO_PRODUCTION, WIP, FG_RECEIPT, SECONDARY.\n\nSet collection variables base_url and token. Sample field names are a template - align them with the field spec before go-live.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "https://aifoodinspector.nutriobox.com",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "ntbx_whk_587231a06c77c733d51e1326f3d4212dd0db2936d3948e2e",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. PMR",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/vouchers/pact-webhook",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "vouchers",
+            "pact-webhook"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"event\": \"PMR\",\n  \"voucher_no\": \"PMR-0001\",\n  \"voucher_date\": \"2026-08-05\",\n  \"warehouse\": \"WH-NOIDA\",\n  \"reference_no\": \"\",\n  \"items\": [\n    {\n      \"sku\": \"RM-001\",\n      \"name\": \"Raw material name\",\n      \"quantity\": 100,\n      \"unit\": \"kg\",\n      \"batch\": \"\",\n      \"rate\": 0\n    }\n  ],\n  \"remarks\": \"\",\n  \"source_system\": \"PACT\"\n}"
+        }
+      }
+    },
+    {
+      "name": "2. STOCK_RECEIPT",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/vouchers/pact-webhook",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "vouchers",
+            "pact-webhook"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"event\": \"STOCK_RECEIPT\",\n  \"voucher_no\": \"SR-0001\",\n  \"voucher_date\": \"2026-08-05\",\n  \"warehouse\": \"WH-NOIDA\",\n  \"reference_no\": \"PO-0001\",\n  \"items\": [\n    {\n      \"sku\": \"RM-001\",\n      \"name\": \"Raw material name\",\n      \"quantity\": 100,\n      \"unit\": \"kg\",\n      \"batch\": \"B-2026-08\",\n      \"rate\": 0\n    }\n  ],\n  \"remarks\": \"\",\n  \"source_system\": \"PACT\"\n}"
+        }
+      }
+    },
+    {
+      "name": "3. ISSUE_TO_PRODUCTION",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/vouchers/pact-webhook",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "vouchers",
+            "pact-webhook"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"event\": \"ISSUE_TO_PRODUCTION\",\n  \"voucher_no\": \"ITP-0001\",\n  \"voucher_date\": \"2026-08-05\",\n  \"warehouse\": \"WH-NOIDA\",\n  \"production_order\": \"PO-PROD-0001\",\n  \"items\": [\n    {\n      \"sku\": \"RM-001\",\n      \"name\": \"Raw material name\",\n      \"quantity\": 50,\n      \"unit\": \"kg\",\n      \"batch\": \"B-2026-08\"\n    }\n  ],\n  \"remarks\": \"\",\n  \"source_system\": \"PACT\"\n}"
+        }
+      }
+    },
+    {
+      "name": "4. WIP",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/vouchers/pact-webhook",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "vouchers",
+            "pact-webhook"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"event\": \"WIP\",\n  \"voucher_no\": \"WIP-0001\",\n  \"voucher_date\": \"2026-08-05\",\n  \"production_order\": \"PO-PROD-0001\",\n  \"stage\": \"MIXING\",\n  \"items\": [\n    {\n      \"sku\": \"WIP-001\",\n      \"name\": \"Semi-finished item\",\n      \"quantity\": 48,\n      \"unit\": \"kg\"\n    }\n  ],\n  \"remarks\": \"\",\n  \"source_system\": \"PACT\"\n}"
+        }
+      }
+    },
+    {
+      "name": "5. FG_RECEIPT",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/vouchers/pact-webhook",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "vouchers",
+            "pact-webhook"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"event\": \"FG_RECEIPT\",\n  \"voucher_no\": \"FG-0001\",\n  \"voucher_date\": \"2026-08-05\",\n  \"warehouse\": \"FG-STORE-NOIDA\",\n  \"production_order\": \"PO-PROD-0001\",\n  \"items\": [\n    {\n      \"sku\": \"FG-001\",\n      \"name\": \"Finished product name\",\n      \"quantity\": 200,\n      \"unit\": \"pcs\",\n      \"batch\": \"FG-2026-08\"\n    }\n  ],\n  \"remarks\": \"\",\n  \"source_system\": \"PACT\"\n}"
+        }
+      }
+    },
+    {
+      "name": "6. SECONDARY",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/vouchers/pact-webhook",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "vouchers",
+            "pact-webhook"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"event\": \"SECONDARY\",\n  \"voucher_no\": \"SEC-0001\",\n  \"voucher_date\": \"2026-08-05\",\n  \"warehouse\": \"FG-STORE-NOIDA\",\n  \"reference_no\": \"\",\n  \"items\": [\n    {\n      \"sku\": \"FG-001\",\n      \"name\": \"Finished product name\",\n      \"quantity\": 200,\n      \"unit\": \"pcs\",\n      \"batch\": \"FG-2026-08\"\n    }\n  ],\n  \"remarks\": \"\",\n  \"source_system\": \"PACT\"\n}"
+        }
+      }
+    }
+  ]
+}

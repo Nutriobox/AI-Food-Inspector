@@ -1,0 +1,84 @@
+{
+  "info": {
+    "name": "NutrioBox KDS / AI Food Inspector - API",
+    "description": "The NutrioBox app API (Next.js routes). Set collection variables:\n  base_url = https://kds.nutriobox.com  (or https://aifoodinspector.nutriobox.com)\n  token    = a Supabase access_token (sign in, copy the access_token)\n\nAuth: all /api/* routes need  Authorization: Bearer {{token}}  (native/Bearer support\nis in middleware.ts). /api/petpooja/* use the Petpooja token + IP allowlist, not this.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }] },
+  "variable": [
+    { "key": "base_url", "value": "https://kds.nutriobox.com", "type": "string" },
+    { "key": "token", "value": "PASTE_SUPABASE_ACCESS_TOKEN", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "KDS",
+      "item": [
+        {
+          "name": "Live orders",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/kds?mode=live", "host": ["{{base_url}}"], "path": ["api", "kds"], "query": [ { "key": "mode", "value": "live" }, { "key": "restaurant", "value": "", "disabled": true } ] }
+          }
+        },
+        {
+          "name": "Order item detail",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/kds/order-item/1", "host": ["{{base_url}}"], "path": ["api", "kds", "order-item", "1"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Evaluate flow",
+      "item": [
+        {
+          "name": "Score (Gemini)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/api/score", "host": ["{{base_url}}"], "path": ["api", "score"] },
+            "body": { "mode": "raw", "raw": "{\n  \"image\": \"data:image/jpeg;base64,REPLACE_WITH_BASE64_JPEG\",\n  \"criteria\": [\"Base is evenly covered\", \"Paneer is visible\"],\n  \"dishName\": \"Classic Paneer Tikka Pizza\",\n  \"category\": \"Pizza\",\n  \"expectedGrams\": 365\n}" }
+          }
+        },
+        {
+          "name": "Evaluate (persist)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/api/evaluate", "host": ["{{base_url}}"], "path": ["api", "evaluate"] },
+            "body": { "mode": "raw", "raw": "{\n  \"orderItemId\": 1,\n  \"score\": 92,\n  \"status\": \"Pass\",\n  \"weight_g\": null,\n  \"temperature_c\": null,\n  \"image\": \"data:image/jpeg;base64,REPLACE_WITH_BASE64_JPEG\",\n  \"notes\": \"Looks good\",\n  \"tags\": []\n}" }
+          }
+        },
+        {
+          "name": "AI scores (log)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/api/ai-scores", "host": ["{{base_url}}"], "path": ["api", "ai-scores"] },
+            "body": { "mode": "raw", "raw": "{\n  \"dishId\": 1,\n  \"dishName\": \"Classic Paneer Tikka Pizza\",\n  \"score\": 92,\n  \"verdict\": \"Pass\",\n  \"summary\": \"Meets criteria\",\n  \"criteria\": [\"Base is evenly covered\"]\n}" }
+          }
+        },
+        {
+          "name": "Order status",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/api/order-status", "host": ["{{base_url}}"], "path": ["api", "order-status"] },
+            "body": { "mode": "raw", "raw": "{\n  \"orderId\": 1,\n  \"status\": \"ready\"\n}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Analytics (read-only)",
+      "item": [
+        { "name": "Overview", "request": { "method": "GET", "url": { "raw": "{{base_url}}/api/overview", "host": ["{{base_url}}"], "path": ["api", "overview"] } } },
+        { "name": "Dishes", "request": { "method": "GET", "url": { "raw": "{{base_url}}/api/dishes", "host": ["{{base_url}}"], "path": ["api", "dishes"] } } },
+        { "name": "Evaluations", "request": { "method": "GET", "url": { "raw": "{{base_url}}/api/evaluations", "host": ["{{base_url}}"], "path": ["api", "evaluations"] } } },
+        { "name": "Restaurants", "request": { "method": "GET", "url": { "raw": "{{base_url}}/api/restaurants", "host": ["{{base_url}}"], "path": ["api", "restaurants"] } } },
+        { "name": "Menu view (all outlets)", "request": { "method": "GET", "url": { "raw": "{{base_url}}/api/menu-view", "host": ["{{base_url}}"], "path": ["api", "menu-view"] } } }
+      ]
+    }
+  ]
+}

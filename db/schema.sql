@@ -132,3 +132,18 @@ ALTER TABLE pp_menu_addons ADD COLUMN IF NOT EXISTS in_stock BOOLEAN NOT NULL DE
 
 -- Second reference image: reference_image = Dine In, reference_image_delivery = Delivery.
 ALTER TABLE dishes ADD COLUMN IF NOT EXISTS reference_image_delivery TEXT;
+
+-- Raw capture of every incoming PACT voucher webhook (factory-stage events).
+-- Populated by /api/vouchers/pact-webhook. Every event is stored first, then validated,
+-- so nothing is lost even if the token or event type is wrong.
+CREATE TABLE IF NOT EXISTS pact_events (
+  id           SERIAL PRIMARY KEY,
+  received_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  token_ok     BOOLEAN NOT NULL DEFAULT false,
+  event        TEXT,          -- PMR / STOCK_RECEIPT / ISSUE_TO_PRODUCTION / WIP / FG_RECEIPT / SECONDARY
+  voucher_no   TEXT,
+  note         TEXT,
+  raw          JSONB
+);
+CREATE INDEX IF NOT EXISTS idx_pact_events_received ON pact_events(received_at);
+CREATE INDEX IF NOT EXISTS idx_pact_events_event    ON pact_events(event);
