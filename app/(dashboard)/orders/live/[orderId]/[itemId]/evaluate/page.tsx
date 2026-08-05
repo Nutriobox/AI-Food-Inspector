@@ -39,6 +39,11 @@ type ScoreResult = {
 // dedicated microcontroller reading the HX711 off-CPU; this is the interim threshold.
 const SCALE_MAX_SPREAD_G = 40;
 
+// A steady reading within this many grams of the current zero is treated as "empty" and
+// re-captured as the zero (auto-tare). Real dishes are 200 g+, far outside this, so their
+// weight is never zeroed away; only near-empty drift gets cancelled.
+const AUTO_ZERO_BAND = 80;
+
 // Leaving this screen returns to the Past board: by the time an operator backs out
 // of an evaluation the ticket has normally just been completed, and Past is where it
 // now lives. (The Live tab is one tap away if the order still has items outstanding.)
@@ -83,6 +88,7 @@ export default function EvaluatePage() {
   const [scaleState, setScaleState] = useState<"ok" | "unstable" | "offline">("ok");
   const samplesRef = useRef<number[]>([]);
   const unstableCountRef = useRef(0); // consecutive jumpy polls, so brief settling isn't flagged
+  const softZeroRef = useRef(0); // auto-zero baseline: cancels drift so empty always reads 0
   const [capturedWeight, setCapturedWeight] = useState<number>(0); // scale reading locked at the moment of capture
   const [capturedScaleOk, setCapturedScaleOk] = useState<boolean>(true); // was the scale trustworthy at capture time?
 
@@ -175,26 +181,34 @@ export default function EvaluatePage() {
             // read "unstable" for seconds even though it had already settled - while a
             // terminal looked fine, because there you just wait and read the settled
             // value. Short window + median display reproduces that "wait and read".
-            if (s.length > 5) s.shift();
+            if (s.length > 4) s.shift();
             if (s.length >= 3) {
               const sorted = [...s].sort((a, b) => a - b);
-              const mid = sorted[Math.floor(sorted.length / 2)];       // steady display
+              const mid = sorted[Math.floor(sorted.length / 2)];       // steady median
               const trimmed = sorted.length >= 4 ? sorted.slice(1, -1) : sorted; // drop 1 hi/lo
               const spread = trimmed[trimmed.length - 1] - trimmed[0];
-              setWeight(mid);
-              // Only flag "unstable" if the reading stays jumpy for a sustained stretch
-              // (~3s). Brief jumpiness while placing or lifting an item is normal settling,
-              // not a fault, so we don't flash the warning during it - only a persistently
-              // jumpy (genuinely broken/disconnected) scale trips it.
-              if (spread > SCALE_MAX_SPREAD_G) {
-                unstableCountRef.current += 1;
-                if (unstableCountRef.current >= 6) setScaleState("unstable");
-              } else {
+              const stable = spread <= SCALE_MAX_SPREAD_G;
+              if (stable) {
+                // Auto-zero: when the reading is steady and near the current zero (empty
+                // platform) capture it as the new zero, so drift always shows 0 with no
+                // manual tare. A real dish sits far outside AUTO_ZERO_BAND and is never
+                // zeroed; after a dish is lifted the reading falls back into the band and
+                // re-zeros itself. This kills the "empty shows 47 g" problem for good.
+                if (Math.abs(mid - softZeroRef.current) < AUTO_ZERO_BAND) {
+                  softZeroRef.current = mid;
+                }
+                setWeight(mid - softZeroRef.current);   // snap to the settled value
                 unstableCountRef.current = 0;
                 setScaleState("ok");
+              } else {
+                // Mid-motion (placing or lifting): HOLD the last steady number instead of
+                // showing the noisy in-between values, so it feels instant and clean. Only
+                // a persistently jumpy (broken) scale, after ~3s, trips the warning.
+                unstableCountRef.current += 1;
+                if (unstableCountRef.current >= 6) setScaleState("unstable");
               }
             } else {
-              setWeight(j.weight_g);
+              setWeight(j.weight_g - softZeroRef.current);
             }
             return;
           }
@@ -203,29 +217,11 @@ export default function EvaluatePage() {
       // Weight service not reachable -> show 0 (never a fake number).
       if (active) { samplesRef.current = []; setWeight(0); setScaleState("offline"); }
     };
-    const id = setInterval(tick, 500);
+    const id = setInterval(tick, 300); // poll a bit faster so place/remove feels instant
     tick();
     return () => { active = false; clearInterval(id); };
   }, []);
 
-  // One-tap zero for the operator: taps the scale's /tare so staff can re-zero from
-  // the screen instead of a terminal command. Platform should be empty when tapped.
-  const [taring, setTaring] = useState(false);
-  async function tareScale() {
-    const base = (process.env.NEXT_PUBLIC_WEIGHT_URL || "http://127.0.0.1:8765/weight").replace(/\/weight$/, "");
-    setTaring(true);
-    try {
-      const r = await fetch(`${base}/tare`, { method: "POST" });
-      if (!r.ok) throw new Error();
-      samplesRef.current = [];
-      unstableCountRef.current = 0;
-      toast.success("Scale zeroed");
-    } catch {
-      toast.error("Could not zero the scale — is the platform empty and the service running?");
-    } finally {
-      setTaring(false);
-    }
-  }
 
   useEffect(() => {
     if (item?.eval_weight != null) setCapturedWeight(item.eval_weight); // restore the saved scale reading so it doesn't show 0 on reopen
@@ -429,16 +425,6 @@ export default function EvaluatePage() {
                   {scaleState === "offline" ? "Scale not connected" : "Scale unstable"} — weight not recorded
                 </span>
               </>
-            )}
-            {scaleState !== "offline" && (
-              <button
-                onClick={tareScale}
-                disabled={taring}
-                title="Zero the scale — empty the platform first"
-                className="ml-3 inline-flex items-center rounded-btn border border-line text-xs font-semibold px-2 py-1 hover:bg-canvas disabled:opacity-50"
-              >
-                {taring ? "Zeroing…" : "Zero scale"}
-              </button>
             )}
           </div>
           )}
