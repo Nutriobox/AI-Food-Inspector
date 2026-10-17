@@ -78,16 +78,42 @@ export async function POST(req: NextRequest) {
     const customer = cust?.name ? String(cust.name) : null;
 
     // Idempotent insert: if Petpooja resends the same order, don't duplicate.
+    // Billing fields from the Global Sales API payload — persisted alongside the KOT fields
+    // so the Nutriobox ops dashboard can read invoice / tax / discount / totals without a
+    // separate CSV upload step.
+    const n = (v: any): number | null => {
+      if (v === undefined || v === null || v === "") return null;
+      const x = Number(v); return isFinite(x) ? x : null;
+    };
+    const tx = props?.Tax ?? [];
+    const dc = props?.Discount ?? [];
+
     const inserted = await one<{ id: number }>(
-      `INSERT INTO orders (code, restaurant_id, table_no, customer, channel, placed_at, status, kot, ext_id, notes, order_type)
-       VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)
+      `INSERT INTO orders (
+         code, restaurant_id, table_no, customer, channel, placed_at, status, kot, ext_id, notes, order_type,
+         invoice_no, payment_type, customer_phone, customer_address, biller,
+         order_total, core_total, tax_total, discount_total, round_off,
+         service_charge, delivery_charges, packaging_charge, taxes_json, discounts_json)
+       VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?,
+         ?, ?, ?, ?, ?,
+         ?, ?, ?, ?, ?,
+         ?, ?, ?, ?::jsonb, ?::jsonb)
        ON CONFLICT (code) DO NOTHING
        RETURNING id`,
       [code, restaurantId, order?.table_no ? String(order.table_no) : null, customer, channel, placedAt,
        order?.token_no != null && order?.token_no !== "" ? String(order.token_no) : null,
        order?.order_from_id ? String(order.order_from_id) : null,
        order?.comment ? String(order.comment) : null,
-       order?.order_type ? String(order.order_type) : null]
+       order?.order_type ? String(order.order_type) : null,
+       // Billing block:
+       order?.customer_invoice_id ? String(order.customer_invoice_id) : null,
+       order?.payment_type ? String(order.payment_type) : null,
+       cust?.phone ? String(cust.phone) : null,
+       cust?.address ? String(cust.address) : null,
+       order?.biller ? String(order.biller) : null,
+       n(order?.total), n(order?.core_total), n(order?.tax_total), n(order?.discount_total), n(order?.round_off),
+       n(order?.service_charge), n(order?.delivery_charges), n(order?.packaging_charge),
+       JSON.stringify(tx), JSON.stringify(dc)]
     );
 
     if (!inserted) {
@@ -138,7 +164,14 @@ export async function POST(req: NextRequest) {
         await run(`UPDATE dishes SET pp_item_id = ? WHERE id = ? AND (pp_item_id IS NULL OR pp_item_id = '')`, [ppItem, dish.id]);
       }
       if (dish) {
-        await run(`INSERT INTO order_items (order_id, dish_id, quantity) VALUES (?, ?, ?)`, [orderId, dish.id, qty]);
+        await run(
+          `INSERT INTO order_items (order_id, dish_id, quantity, unit_price, item_total, item_tax, item_discount, item_code, sap_code)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [orderId, dish.id, qty,
+           n(it?.price), n(it?.total), n(it?.tax), n(it?.discount),
+           it?.itemcode ? String(it.itemcode) : null,
+           it?.sap_code ? String(it.sap_code) : null]
+        );
       }
 
       // Add-ons are nested inside each Petpooja item -> store each as an add-on line.
@@ -156,7 +189,11 @@ export async function POST(req: NextRequest) {
         const adNoCapture = adIsCondiment && !(Number(ad?.price) > 0);
         let adDish = await one<{ id: number }>(`SELECT id FROM dishes WHERE lower(name) = lower(?) AND category IN ('Add-Ons','Extras') LIMIT 1`, [adName]);
         if (!adDish) adDish = await one<{ id: number }>(`INSERT INTO dishes (name, category) VALUES (?, 'Add-Ons') RETURNING id`, [adName]);
-        if (adDish) await run(`INSERT INTO order_items (order_id, dish_id, quantity, no_capture) VALUES (?, ?, ?, ?)`, [orderId, adDish.id, adQty, adNoCapture]);
+        if (adDish) await run(
+          `INSERT INTO order_items (order_id, dish_id, quantity, no_capture, unit_price)
+           VALUES (?, ?, ?, ?, ?)`,
+          [orderId, adDish.id, adQty, adNoCapture, n(ad?.price)]
+        );
       }
     }
 

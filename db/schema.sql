@@ -147,3 +147,34 @@ CREATE TABLE IF NOT EXISTS pact_events (
 );
 CREATE INDEX IF NOT EXISTS idx_pact_events_received ON pact_events(received_at);
 CREATE INDEX IF NOT EXISTS idx_pact_events_event    ON pact_events(event);
+
+
+-- ─── BILLING COLUMNS (added 2026-10-17) ──────────────────────────────────────
+-- Populated from PetPooja's Global Sales API webhook payload (same hook that
+-- already lands at /api/petpooja/webhook). Historical rows were backfilled from
+-- petpooja_events.raw on the same day.
+ALTER TABLE orders
+  ADD COLUMN IF NOT EXISTS invoice_no       TEXT,
+  ADD COLUMN IF NOT EXISTS payment_type     TEXT,
+  ADD COLUMN IF NOT EXISTS customer_phone   TEXT,
+  ADD COLUMN IF NOT EXISTS customer_address TEXT,
+  ADD COLUMN IF NOT EXISTS biller           TEXT,
+  ADD COLUMN IF NOT EXISTS order_total      NUMERIC(10,2),
+  ADD COLUMN IF NOT EXISTS core_total       NUMERIC(10,2),
+  ADD COLUMN IF NOT EXISTS tax_total        NUMERIC(10,2),
+  ADD COLUMN IF NOT EXISTS discount_total   NUMERIC(10,2),
+  ADD COLUMN IF NOT EXISTS round_off        NUMERIC(10,2),
+  ADD COLUMN IF NOT EXISTS service_charge   NUMERIC(10,2),
+  ADD COLUMN IF NOT EXISTS delivery_charges NUMERIC(10,2),
+  ADD COLUMN IF NOT EXISTS packaging_charge NUMERIC(10,2),
+  ADD COLUMN IF NOT EXISTS taxes_json       JSONB,
+  ADD COLUMN IF NOT EXISTS discounts_json   JSONB;
+CREATE INDEX IF NOT EXISTS idx_orders_invoice_no ON orders(invoice_no);
+
+ALTER TABLE order_items
+  ADD COLUMN IF NOT EXISTS unit_price    NUMERIC(10,2),
+  ADD COLUMN IF NOT EXISTS item_total    NUMERIC(10,2),
+  ADD COLUMN IF NOT EXISTS item_tax      NUMERIC(10,2),
+  ADD COLUMN IF NOT EXISTS item_discount NUMERIC(10,2),
+  ADD COLUMN IF NOT EXISTS item_code     TEXT,
+  ADD COLUMN IF NOT EXISTS sap_code      TEXT;
