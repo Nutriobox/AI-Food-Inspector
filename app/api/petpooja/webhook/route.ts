@@ -93,11 +93,15 @@ export async function POST(req: NextRequest) {
          code, restaurant_id, table_no, customer, channel, placed_at, status, kot, ext_id, notes, order_type,
          invoice_no, payment_type, customer_phone, customer_address, biller,
          order_total, core_total, tax_total, discount_total, round_off,
-         service_charge, delivery_charges, packaging_charge, taxes_json, discounts_json)
+         service_charge, delivery_charges, packaging_charge, taxes_json, discounts_json,
+         pp_status, sub_order_type, group_name, assignee, no_of_persons,
+         additional_charge, deduction_charge, waived_off, order_cancel_reason, transaction_id)
        VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?,
          ?, ?, ?, ?, ?,
          ?, ?, ?, ?, ?,
-         ?, ?, ?, ?::jsonb, ?::jsonb)
+         ?, ?, ?, ?::jsonb, ?::jsonb,
+         ?, ?, ?, ?, ?,
+         ?, ?, ?, ?, ?)
        ON CONFLICT (code) DO NOTHING
        RETURNING id`,
       [code, restaurantId, order?.table_no ? String(order.table_no) : null, customer, channel, placedAt,
@@ -105,7 +109,7 @@ export async function POST(req: NextRequest) {
        order?.order_from_id ? String(order.order_from_id) : null,
        order?.comment ? String(order.comment) : null,
        order?.order_type ? String(order.order_type) : null,
-       // Billing block:
+       // Billing block (invoice + totals):
        order?.customer_invoice_id ? String(order.customer_invoice_id) : null,
        order?.payment_type ? String(order.payment_type) : null,
        cust?.phone ? String(cust.phone) : null,
@@ -113,7 +117,16 @@ export async function POST(req: NextRequest) {
        order?.biller ? String(order.biller) : null,
        n(order?.total), n(order?.core_total), n(order?.tax_total), n(order?.discount_total), n(order?.round_off),
        n(order?.service_charge), n(order?.delivery_charges), n(order?.packaging_charge),
-       JSON.stringify(tx), JSON.stringify(dc)]
+       JSON.stringify(tx), JSON.stringify(dc),
+       // Extended Order Summary Item Report block:
+       order?.status ? String(order.status) : null,
+       order?.sub_order_type ? String(order.sub_order_type) : null,
+       order?.GroupName ? String(order.GroupName) : null,
+       order?.assignee ? String(order.assignee) : null,
+       order?.no_of_persons != null && order?.no_of_persons !== "" ? parseInt(String(order.no_of_persons), 10) || null : null,
+       n(order?.additional_charge), n(order?.deduction_charge), n(order?.waived_off),
+       order?.cancel_reason ? String(order.cancel_reason) : null,
+       order?.transaction_id ? String(order.transaction_id) : null]
     );
 
     if (!inserted) {
@@ -165,12 +178,14 @@ export async function POST(req: NextRequest) {
       }
       if (dish) {
         await run(
-          `INSERT INTO order_items (order_id, dish_id, quantity, unit_price, item_total, item_tax, item_discount, item_code, sap_code)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO order_items (order_id, dish_id, quantity, unit_price, item_total, item_tax, item_discount, item_code, sap_code, pp_category_name, specialnotes)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [orderId, dish.id, qty,
            n(it?.price), n(it?.total), n(it?.tax), n(it?.discount),
            it?.itemcode ? String(it.itemcode) : null,
-           it?.sap_code ? String(it.sap_code) : null]
+           it?.sap_code ? String(it.sap_code) : null,
+           it?.category_name ? String(it.category_name) : null,
+           it?.specialnotes ? String(it.specialnotes) : null]
         );
       }
 

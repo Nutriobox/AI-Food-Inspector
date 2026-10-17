@@ -178,3 +178,23 @@ ALTER TABLE order_items
   ADD COLUMN IF NOT EXISTS item_discount NUMERIC(10,2),
   ADD COLUMN IF NOT EXISTS item_code     TEXT,
   ADD COLUMN IF NOT EXISTS sap_code      TEXT;
+
+
+-- ─── EXTENDED BILLING COLUMNS (added 2026-10-17 pm) ──────────────────────────
+-- Mirror of PetPooja's "Order Summary Item Report" CSV so the ops dashboard
+-- Sales Data section carries every column the operations team sees in the
+-- PetPooja dashboard export.
+ALTER TABLE orders
+  ADD COLUMN IF NOT EXISTS pp_status           TEXT,
+  ADD COLUMN IF NOT EXISTS sub_order_type      TEXT,
+  ADD COLUMN IF NOT EXISTS group_name          TEXT,
+  ADD COLUMN IF NOT EXISTS assignee            TEXT,
+  ADD COLUMN IF NOT EXISTS no_of_persons       INTEGER,
+  ADD COLUMN IF NOT EXISTS additional_charge   NUMERIC(10,2),
+  ADD COLUMN IF NOT EXISTS deduction_charge    NUMERIC(10,2),
+  ADD COLUMN IF NOT EXISTS waived_off          NUMERIC(10,2),
+  ADD COLUMN IF NOT EXISTS order_cancel_reason TEXT,
+  ADD COLUMN IF NOT EXISTS transaction_id      TEXT;
+ALTER TABLE order_items
+  ADD COLUMN IF NOT EXISTS pp_category_name TEXT,
+  ADD COLUMN IF NOT EXISTS specialnotes     TEXT;
