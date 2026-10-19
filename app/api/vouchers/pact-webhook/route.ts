@@ -4,16 +4,32 @@ import { rateLimit, clientIp } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
-// Real-time factory-stage vouchers pushed by PACT into NutrioBox. One POST per event,
-// tagged with an "event" field. Built to mirror the Petpooja webhook: authenticate,
-// capture the raw payload first (so nothing is ever lost), then validate.
+// Real-time factory- and outlet-stage vouchers pushed by PACT into NutrioBox. One POST
+// per event, tagged with an "event" field. Built to mirror the Petpooja webhook:
+// authenticate, capture the raw payload first (so nothing is ever lost), then validate.
 //
 // Auth: PACT sends the shared secret as EITHER  Authorization: Bearer <token>  OR
 //       x-api-key: <token>. Set the secret in the PACT_WEBHOOK_TOKEN env var (Vercel).
 // The route is listed in middleware PUBLIC_PREFIXES so it does not require a Supabase
 // login — it authenticates with its own token instead.
+//
+// 2026-10-19: added the 8 document types Mayank asked PACT for over email
+// (PURCHASE_ORDER, STOCK_INWARD, GRN_RETURN, STOCK_OUTWARD_OUTLET,
+// OUTLET_STOCK_RECEIPT, FACTORY_SALES_ORDER, FACTORY_SALES_INVOICE,
+// OUTLET_SALES_RETURN) so Satvik can share one URL + one key for the full set.
+// STOCK_RECEIPT is kept as an alias for STOCK_INWARD so an older sender keeps working.
 const EVENTS = new Set([
+  // Original factory-stage voucher events (live since 2026 setup)
   "PMR", "STOCK_RECEIPT", "ISSUE_TO_PRODUCTION", "WIP", "FG_RECEIPT", "SECONDARY",
+  // Added 2026-10-19 for PACT's expanded webhook list
+  "PURCHASE_ORDER",
+  "STOCK_INWARD",
+  "GRN_RETURN",            // Goods Received Return
+  "STOCK_OUTWARD_OUTLET",  // Stock Outward to Outlet
+  "OUTLET_STOCK_RECEIPT",  // Outlet-side GRN of a factory dispatch
+  "FACTORY_SALES_ORDER",
+  "FACTORY_SALES_INVOICE",
+  "OUTLET_SALES_RETURN",   // Outlet / Sales Return
 ]);
 
 // Opening the URL in a browser is a GET -> friendly "alive" message, like the PP hook.
@@ -21,7 +37,7 @@ export async function GET() {
   return NextResponse.json({
     ok: true,
     service: "NutrioBox WMS — PACT voucher webhook",
-    message: "Live. PACT posts factory-stage events here via POST, one per event.",
+    message: "Live. PACT posts voucher events here via POST, one per event.",
     events: Array.from(EVENTS),
   });
 }
