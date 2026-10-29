@@ -32,6 +32,42 @@ const EVENTS = new Set([
   "OUTLET_SALES_RETURN",   // Outlet / Sales Return
 ]);
 
+// 2026-10-29 (Satvik): PACT serialises every numeric column as a QUOTED
+// string ("qty": "500000" instead of "qty": 500000). PACT-side fix was
+// declined ("they represent numeric values"), so we coerce at ingest and
+// store proper JSON numbers in pact_events.raw. Downstream readers (the
+// ops dashboard's Process Flow / Stock-Inward reports) read raw -> items
+// -> [i] -> qty and do real math on it, so the string form silently
+// dropped rows or produced nonsense sums. Coercion is lossless for finite
+// numbers; an empty string is left as "" so an absent value stays
+// distinguishable from a zero.
+const PACT_NUMERIC_FIELDS = new Set<string>([
+  "qty", "base_qty", "rate", "amount",
+  "cgsttax_amount", "sgsttax_amount", "igsttax_amount",
+  // Common PACT numeric columns that may surface across event types.
+  "opening_qty", "closing_qty", "received_qty", "issued_qty",
+  "wastage_qty", "scrap_qty", "excess_qty", "shortage_qty",
+  "unit_price", "total_amount", "net_amount", "tax_amount",
+  "discount_amount", "cgst_rate", "sgst_rate", "igst_rate",
+]);
+
+function coercePactNumerics(obj: unknown): void {
+  if (!obj || typeof obj !== "object") return;
+  if (Array.isArray(obj)) {
+    for (const el of obj) coercePactNumerics(el);
+    return;
+  }
+  const rec = obj as Record<string, unknown>;
+  for (const [k, v] of Object.entries(rec)) {
+    if (PACT_NUMERIC_FIELDS.has(k) && typeof v === "string" && v.trim() !== "") {
+      const n = Number(v);
+      if (Number.isFinite(n)) rec[k] = n;
+    } else if (v && typeof v === "object") {
+      coercePactNumerics(v);
+    }
+  }
+}
+
 // Opening the URL in a browser is a GET -> friendly "alive" message, like the PP hook.
 export async function GET() {
   return NextResponse.json({
@@ -58,6 +94,10 @@ export async function POST(req: NextRequest) {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     return NextResponse.json({ ok: false, error: "invalid payload" }, { status: 400 });
   }
+
+  // Coerce PACT's quoted-number fields to real JSON numbers before anything
+  // reads body (so pact_events.raw stores the fixed-up version too).
+  coercePactNumerics(body);
 
   const expected = process.env.PACT_WEBHOOK_TOKEN || "";
   const tokenOk = !!expected && tokenFrom(req) === expected;
