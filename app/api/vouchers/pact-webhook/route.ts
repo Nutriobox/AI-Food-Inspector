@@ -32,6 +32,15 @@ const EVENTS = new Set([
   "OUTLET_SALES_RETURN",   // Outlet / Sales Return
 ]);
 
+// 2026-11-16: PACT's factory sender posts the sales invoice as
+// "FACTORY_SALE_INVOICE" (no S); every one was rejected as an unknown event
+// from 5 Nov. Rather than wait on a PACT-side rename we map their spelling to
+// the agreed name at ingest, so pact_events and every downstream reader see
+// one event name. raw keeps PACT's original "event" value untouched.
+const EVENT_ALIASES: Record<string, string> = {
+  FACTORY_SALE_INVOICE: "FACTORY_SALES_INVOICE",
+};
+
 // 2026-10-29 (Satvik): PACT serialises every numeric column as a QUOTED
 // string ("qty": "500000" instead of "qty": 500000). PACT-side fix was
 // declined ("they represent numeric values"), so we coerce at ingest and
@@ -101,7 +110,8 @@ export async function POST(req: NextRequest) {
 
   const expected = process.env.PACT_WEBHOOK_TOKEN || "";
   const tokenOk = !!expected && tokenFrom(req) === expected;
-  const event = String(body?.event ?? "").toUpperCase();
+  const sentEvent = String(body?.event ?? "").trim().toUpperCase();
+  const event = EVENT_ALIASES[sentEvent] ?? sentEvent;
   const voucherNo = String(body?.voucher_no ?? "");
 
   // Always capture the raw event first, so we can inspect/replay every incoming voucher.
