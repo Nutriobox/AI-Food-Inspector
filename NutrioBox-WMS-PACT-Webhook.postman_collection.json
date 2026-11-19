@@ -22,7 +22,7 @@
     },
     {
       "key": "token",
-      "value": "ntbx_whk_587231a06c77c733d51e1326f3d4212dd0db2936d3948e2e",
+      "value": "",
       "type": "string"
     }
   ],
@@ -186,6 +186,222 @@
         "body": {
           "mode": "raw",
           "raw": "{\n  \"event\": \"SECONDARY\",\n  \"voucher_no\": \"SEC-0001\",\n  \"voucher_date\": \"2026-08-05\",\n  \"warehouse\": \"FG-STORE-NOIDA\",\n  \"reference_no\": \"\",\n  \"items\": [\n    {\n      \"sku\": \"FG-001\",\n      \"name\": \"Finished product name\",\n      \"quantity\": 200,\n      \"unit\": \"pcs\",\n      \"batch\": \"FG-2026-08\"\n    }\n  ],\n  \"remarks\": \"\",\n  \"source_system\": \"PACT\"\n}"
+        }
+      }
+    },
+    {
+      "name": "7. PURCHASE_ORDER",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/vouchers/pact-webhook",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "vouchers",
+            "pact-webhook"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"event\": \"PURCHASE_ORDER\",\n  \"voucher_no\": \"TEST-PURCHASE_ORDER-0001\",\n  \"voucher_date\": \"2026-11-19\",\n  \"company\": \"Factory\",\n  \"warehouse\": \"Factory - Main\",\n  \"party\": {\n    \"type\": \"supplier\",\n    \"code\": \"\",\n    \"name\": \"Test party\"\n  },\n  \"items\": [\n    {\n      \"code\": \"RM-001\",\n      \"name\": \"Test item\",\n      \"qty\": 1,\n      \"unit_name\": \"Kg\",\n      \"rate\": 0,\n      \"amount\": 0,\n      \"batch_no\": \"\"\n    }\n  ],\n  \"totals\": {\n    \"qty\": 1,\n    \"amount\": 0\n  },\n  \"status\": \"posted\",\n  \"remarks\": \"Postman test - safe to ignore\",\n  \"source_system\": \"PACT\"\n}"
+        }
+      }
+    },
+    {
+      "name": "8. STOCK_INWARD",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/vouchers/pact-webhook",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "vouchers",
+            "pact-webhook"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"event\": \"STOCK_INWARD\",\n  \"voucher_no\": \"TEST-STOCK_INWARD-0001\",\n  \"voucher_date\": \"2026-11-19\",\n  \"company\": \"Factory\",\n  \"warehouse\": \"Factory - Main\",\n  \"party\": {\n    \"type\": \"supplier\",\n    \"code\": \"\",\n    \"name\": \"Test party\"\n  },\n  \"items\": [\n    {\n      \"code\": \"RM-001\",\n      \"name\": \"Test item\",\n      \"qty\": 1,\n      \"unit_name\": \"Kg\",\n      \"rate\": 0,\n      \"amount\": 0,\n      \"batch_no\": \"\"\n    }\n  ],\n  \"totals\": {\n    \"qty\": 1,\n    \"amount\": 0\n  },\n  \"status\": \"posted\",\n  \"remarks\": \"Postman test - safe to ignore\",\n  \"source_system\": \"PACT\"\n}"
+        }
+      }
+    },
+    {
+      "name": "9. GRN_RETURN",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/vouchers/pact-webhook",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "vouchers",
+            "pact-webhook"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"event\": \"GRN_RETURN\",\n  \"voucher_no\": \"TEST-GRN_RETURN-0001\",\n  \"voucher_date\": \"2026-11-19\",\n  \"company\": \"Factory\",\n  \"warehouse\": \"Factory - Main\",\n  \"party\": {\n    \"type\": \"supplier\",\n    \"code\": \"\",\n    \"name\": \"Test party\"\n  },\n  \"items\": [\n    {\n      \"code\": \"RM-001\",\n      \"name\": \"Test item\",\n      \"qty\": 1,\n      \"unit_name\": \"Kg\",\n      \"rate\": 0,\n      \"amount\": 0,\n      \"batch_no\": \"\"\n    }\n  ],\n  \"totals\": {\n    \"qty\": 1,\n    \"amount\": 0\n  },\n  \"status\": \"posted\",\n  \"remarks\": \"Postman test - safe to ignore\",\n  \"source_system\": \"PACT\"\n}"
+        }
+      }
+    },
+    {
+      "name": "10. STOCK_OUTWARD_OUTLET",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/vouchers/pact-webhook",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "vouchers",
+            "pact-webhook"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"event\": \"STOCK_OUTWARD_OUTLET\",\n  \"voucher_no\": \"TEST-STOCK_OUTWARD_OUTLET-0001\",\n  \"voucher_date\": \"2026-11-19\",\n  \"company\": \"Factory\",\n  \"warehouse\": \"Factory - Main\",\n  \"party\": {\n    \"type\": \"outlet\",\n    \"code\": \"\",\n    \"name\": \"Test party\"\n  },\n  \"items\": [\n    {\n      \"code\": \"RM-001\",\n      \"name\": \"Test item\",\n      \"qty\": 1,\n      \"unit_name\": \"Kg\",\n      \"rate\": 0,\n      \"amount\": 0,\n      \"batch_no\": \"\"\n    }\n  ],\n  \"totals\": {\n    \"qty\": 1,\n    \"amount\": 0\n  },\n  \"status\": \"posted\",\n  \"remarks\": \"Postman test - safe to ignore\",\n  \"source_system\": \"PACT\"\n}"
+        }
+      }
+    },
+    {
+      "name": "11. OUTLET_STOCK_RECEIPT",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/vouchers/pact-webhook",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "vouchers",
+            "pact-webhook"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"event\": \"OUTLET_STOCK_RECEIPT\",\n  \"voucher_no\": \"TEST-OUTLET_STOCK_RECEIPT-0001\",\n  \"voucher_date\": \"2026-11-19\",\n  \"company\": \"Factory\",\n  \"warehouse\": \"Factory - Main\",\n  \"party\": {\n    \"type\": \"factory\",\n    \"code\": \"\",\n    \"name\": \"Test party\"\n  },\n  \"items\": [\n    {\n      \"code\": \"RM-001\",\n      \"name\": \"Test item\",\n      \"qty\": 1,\n      \"unit_name\": \"Kg\",\n      \"rate\": 0,\n      \"amount\": 0,\n      \"batch_no\": \"\"\n    }\n  ],\n  \"totals\": {\n    \"qty\": 1,\n    \"amount\": 0\n  },\n  \"status\": \"posted\",\n  \"remarks\": \"Postman test - safe to ignore\",\n  \"source_system\": \"PACT\"\n}"
+        }
+      }
+    },
+    {
+      "name": "12. FACTORY_SALES_ORDER",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/vouchers/pact-webhook",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "vouchers",
+            "pact-webhook"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"event\": \"FACTORY_SALES_ORDER\",\n  \"voucher_no\": \"TEST-FACTORY_SALES_ORDER-0001\",\n  \"voucher_date\": \"2026-11-19\",\n  \"company\": \"Factory\",\n  \"warehouse\": \"Factory - Main\",\n  \"party\": {\n    \"type\": \"customer\",\n    \"code\": \"\",\n    \"name\": \"Test party\"\n  },\n  \"items\": [\n    {\n      \"code\": \"RM-001\",\n      \"name\": \"Test item\",\n      \"qty\": 1,\n      \"unit_name\": \"Kg\",\n      \"rate\": 0,\n      \"amount\": 0,\n      \"batch_no\": \"\"\n    }\n  ],\n  \"totals\": {\n    \"qty\": 1,\n    \"amount\": 0\n  },\n  \"status\": \"posted\",\n  \"remarks\": \"Postman test - safe to ignore\",\n  \"source_system\": \"PACT\"\n}"
+        }
+      }
+    },
+    {
+      "name": "13. FACTORY_SALES_INVOICE",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/vouchers/pact-webhook",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "vouchers",
+            "pact-webhook"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"event\": \"FACTORY_SALES_INVOICE\",\n  \"voucher_no\": \"TEST-FACTORY_SALES_INVOICE-0001\",\n  \"voucher_date\": \"2026-11-19\",\n  \"company\": \"Factory\",\n  \"warehouse\": \"Factory - Main\",\n  \"party\": {\n    \"type\": \"customer\",\n    \"code\": \"\",\n    \"name\": \"Test party\"\n  },\n  \"items\": [\n    {\n      \"code\": \"RM-001\",\n      \"name\": \"Test item\",\n      \"qty\": 1,\n      \"unit_name\": \"Kg\",\n      \"rate\": 0,\n      \"amount\": 0,\n      \"batch_no\": \"\"\n    }\n  ],\n  \"totals\": {\n    \"qty\": 1,\n    \"amount\": 0\n  },\n  \"status\": \"posted\",\n  \"remarks\": \"Postman test - safe to ignore\",\n  \"source_system\": \"PACT\"\n}"
+        }
+      }
+    },
+    {
+      "name": "14. OUTLET_SALES_RETURN",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/vouchers/pact-webhook",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "vouchers",
+            "pact-webhook"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"event\": \"OUTLET_SALES_RETURN\",\n  \"voucher_no\": \"TEST-OUTLET_SALES_RETURN-0001\",\n  \"voucher_date\": \"2026-11-19\",\n  \"company\": \"Factory\",\n  \"warehouse\": \"Factory - Main\",\n  \"party\": {\n    \"type\": \"outlet\",\n    \"code\": \"\",\n    \"name\": \"Test party\"\n  },\n  \"items\": [\n    {\n      \"code\": \"RM-001\",\n      \"name\": \"Test item\",\n      \"qty\": 1,\n      \"unit_name\": \"Kg\",\n      \"rate\": 0,\n      \"amount\": 0,\n      \"batch_no\": \"\"\n    }\n  ],\n  \"totals\": {\n    \"qty\": 1,\n    \"amount\": 0\n  },\n  \"status\": \"posted\",\n  \"remarks\": \"Postman test - safe to ignore\",\n  \"source_system\": \"PACT\"\n}"
         }
       }
     }

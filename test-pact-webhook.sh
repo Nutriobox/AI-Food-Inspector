@@ -4,7 +4,7 @@
 # Or send one event:  bash test-pact-webhook.sh STOCK_RECEIPT
 
 HOST="https://aifoodinspector.nutriobox.com"   # the NutrioBox app (or kds.nutriobox.com)
-TOKEN="ntbx_whk_587231a06c77c733d51e1326f3d4212dd0db2936d3948e2e"
+TOKEN="${PACT_WEBHOOK_TOKEN:?set PACT_WEBHOOK_TOKEN to the webhook token first}"
 URL="$HOST/api/vouchers/pact-webhook"
 
 send () {

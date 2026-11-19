@@ -97,11 +97,36 @@ export async function POST(req: NextRequest) {
   const rl = await rateLimit("pact_webhook", clientIp(req), 600, 60);
   if (!rl.ok) return NextResponse.json({ ok: false, error: "rate limit exceeded" }, { status: 429 });
 
+  // 2026-11-19: posts we could not parse used to be answered 400 and never
+  // stored, so we could not tell which voucher or event they were (Vercel
+  // showed three such 400s from PACT on 17-19 Nov with nothing in
+  // pact_events). Read the body as text first and, if it is not a JSON
+  // object, still capture it (as text, with the event / voucher number pulled
+  // out where we can) before answering 400 — same "capture first" rule as below.
+  const text = await req.text().catch(() => "");
   let body: any = {};
-  try { body = await req.json(); }
-  catch { return NextResponse.json({ ok: false, error: "invalid JSON" }, { status: 400 }); }
-  if (!body || typeof body !== "object" || Array.isArray(body)) {
-    return NextResponse.json({ ok: false, error: "invalid payload" }, { status: 400 });
+  let parseError = "";
+  try { body = JSON.parse(text); }
+  catch (e: any) { parseError = "invalid JSON: " + String(e?.message ?? e).slice(0, 200); }
+  if (!parseError && (!body || typeof body !== "object" || Array.isArray(body))) {
+    parseError = "invalid payload: not a JSON object";
+  }
+  if (parseError) {
+    const expectedTok = process.env.PACT_WEBHOOK_TOKEN || "";
+    const okTok = !!expectedTok && tokenFrom(req) === expectedTok;
+    const grab = (k: string) => (text.match(new RegExp(`"${k}"\\s*:\\s*"([^"]{1,120})"`, "i")) || [])[1] || null;
+    const ev = grab("event");
+    const vno = grab("voucher_no");
+    try {
+      await run(
+        `INSERT INTO pact_events (token_ok, event, voucher_no, raw, note) VALUES (?, ?, ?, ?, ?)`,
+        [okTok, ev ? (EVENT_ALIASES[ev.toUpperCase()] ?? ev.toUpperCase()) : null, vno,
+         JSON.stringify({ _unparsed: text.slice(0, 500000), _error: parseError,
+                          _content_type: req.headers.get("content-type") || "" }),
+         "rejected: " + parseError.split(":")[0]]
+      );
+    } catch { /* capture failure must not change the response */ }
+    return NextResponse.json({ ok: false, error: parseError }, { status: 400 });
   }
 
   // Coerce PACT's quoted-number fields to real JSON numbers before anything
